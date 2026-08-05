@@ -13,7 +13,7 @@ import dataclasses
 import logging
 from collections.abc import AsyncIterator, Callable
 from types import TracebackType  # noqa: TC003
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -32,33 +32,48 @@ from droid_sdk.schemas.cli import (
 )
 from droid_sdk.schemas.client import (
     AddMcpServerResult,
+    AddUserMessageRequestParams,
     AuthenticateMcpServerResult,
     Base64ImageSource,
     CancelMcpAuthResult,
     ClearMcpAuthResult,
+    CloseSessionRequestParams,
     CloseSessionResult,
+    CompactSessionRequestParams,
     CompactSessionResult,
     DocumentSource,
+    ExecuteRewindRequestParams,
     ExecuteRewindResult,
+    ForkSessionRequestParams,
     ForkSessionResult,
     GetContextBreakdownResult,
     GetContextStatsResult,
+    GetRewindInfoRequestParams,
     GetRewindInfoResult,
+    InitializeSessionRequestParams,
     InitializeSessionResult,
     ListCommandsResult,
     ListMcpRegistryResult,
     ListMcpServersResult,
     ListMcpToolsResult,
     ListSkillsResult,
+    ListToolsRequestParams,
     ListToolsResult,
+    LoadSessionRequestParams,
     LoadSessionResult,
     OutputFormat,
     RemoveMcpServerResult,
+    RenameSessionRequestParams,
     RenameSessionResult,
+    RewindFileCreation,
+    RewindFileSnapshot,
+    SessionSource,
+    SessionTag,
     SubmitBugReportResult,
     SubmitMcpAuthCodeResult,
     ToggleMcpServerResult,
     ToggleMcpToolResult,
+    UpdateSessionSettingsRequestParams,
 )
 from droid_sdk.schemas.enums import (
     AutonomyLevel,
@@ -82,6 +97,9 @@ from droid_sdk.stream import (
     _notification_to_stream_message,
 )
 from droid_sdk.types import DroidClientTransport  # noqa: TC001
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -286,8 +304,8 @@ class DroidClient:
         enabled_tool_ids: list[str] | None = None,
         disabled_tool_ids: list[str] | None = None,
         session_location: str | None = None,
-        session_source: dict[str, Any] | None = None,
-        tags: list[dict[str, Any]] | None = None,
+        session_source: SessionSource | dict[str, Any] | None = None,
+        tags: list[SessionTag | dict[str, Any]] | None = None,
         mcp_oauth_callback_uri: str | None = None,
     ) -> InitializeSessionResult:
         """Initialize a new session.
@@ -332,34 +350,43 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {
-            "machineId": machine_id,
-            "cwd": cwd,
-        }
-        # Add optional params only if set
-        _set_if_not_none(params, "sessionId", session_id)
-        _set_if_not_none(params, "workspaceId", workspace_id)
-        _set_if_not_none(params, "mcpServers", mcp_servers)
-        _set_if_not_none(params, "autonomyMode", _enum_value(autonomy_mode))
-        _set_if_not_none(params, "interactionMode", _enum_value(interaction_mode))
-        _set_if_not_none(params, "autonomyLevel", _enum_value(autonomy_level))
-        _set_if_not_none(params, "modelId", model_id)
-        _set_if_not_none(params, "reasoningEffort", _enum_value(reasoning_effort))
-        _set_if_not_none(params, "specModeModelId", spec_mode_model_id)
-        _set_if_not_none(
-            params,
-            "specModeReasoningEffort",
-            _enum_value(spec_mode_reasoning_effort),
+        validated_session_source = (
+            SessionSource.model_validate(session_source)
+            if session_source is not None
+            else None
         )
-        _set_if_not_none(params, "decompSessionType", _enum_value(decomp_session_type))
-        _set_if_not_none(params, "decompMissionId", decomp_mission_id)
-        _set_if_not_none(params, "skipPermissionsUnsafe", skip_permissions_unsafe)
-        _set_if_not_none(params, "enabledToolIds", enabled_tool_ids)
-        _set_if_not_none(params, "disabledToolIds", disabled_tool_ids)
-        _set_if_not_none(params, "sessionLocation", session_location)
-        _set_if_not_none(params, "sessionSource", session_source)
-        _set_if_not_none(params, "tags", tags)
-        _set_if_not_none(params, "mcpOAuthCallbackUri", mcp_oauth_callback_uri)
+        validated_tags = (
+            [SessionTag.model_validate(tag) for tag in tags]
+            if tags is not None
+            else None
+        )
+        params = _serialize_params(
+            InitializeSessionRequestParams(
+                machine_id=machine_id,
+                cwd=cwd,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                autonomy_mode=autonomy_mode,
+                interaction_mode=interaction_mode,
+                autonomy_level=autonomy_level,
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                spec_mode_model_id=spec_mode_model_id,
+                spec_mode_reasoning_effort=spec_mode_reasoning_effort,
+                decomp_session_type=decomp_session_type,
+                decomp_mission_id=decomp_mission_id,
+                skip_permissions_unsafe=skip_permissions_unsafe,
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+                session_location=session_location,
+                session_source=validated_session_source,
+                tags=validated_tags,
+                mcp_oauth_callback_uri=mcp_oauth_callback_uri,
+            )
+        )
+        # Preserve compatibility with legacy unvalidated MCP dictionaries.
+        if mcp_servers is not None:
+            params["mcpServers"] = mcp_servers
 
         response = await protocol.send_request(
             method=DroidServerMethod.INITIALIZE_SESSION.value,
@@ -400,11 +427,15 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {
-            "sessionId": session_id,
-        }
-        _set_if_not_none(params, "mcpServers", mcp_servers)
-        _set_if_not_none(params, "mcpOAuthCallbackUri", mcp_oauth_callback_uri)
+        params = _serialize_params(
+            LoadSessionRequestParams(
+                session_id=session_id,
+                mcp_oauth_callback_uri=mcp_oauth_callback_uri,
+            )
+        )
+        # Preserve compatibility with legacy unvalidated MCP dictionaries.
+        if mcp_servers is not None:
+            params["mcpServers"] = mcp_servers
 
         response = await protocol.send_request(
             method=DroidServerMethod.LOAD_SESSION.value,
@@ -448,16 +479,21 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {"text": text}
-        _set_if_not_none(params, "images", images)
-        _set_if_not_none(params, "files", files)
-        if output_format is not None:
-            if isinstance(output_format, OutputFormat):
-                params["outputFormat"] = output_format.model_dump(
-                    by_alias=True, exclude_none=True
-                )
-            else:
-                params["outputFormat"] = output_format
+        validated_output_format = (
+            OutputFormat.model_validate(output_format)
+            if output_format is not None
+            else None
+        )
+        params = _serialize_params(
+            AddUserMessageRequestParams(
+                text=text,
+                output_format=validated_output_format,
+            )
+        )
+        if images is not None:
+            params["images"] = images
+        if files is not None:
+            params["files"] = files
 
         # Use custom request_id by monkey-patching the protocol temporarily,
         # or pass via overridden send_request. The protocol engine generates
@@ -556,20 +592,19 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "modelId", model_id)
-        _set_if_not_none(params, "reasoningEffort", _enum_value(reasoning_effort))
-        _set_if_not_none(params, "autonomyMode", _enum_value(autonomy_mode))
-        _set_if_not_none(params, "interactionMode", _enum_value(interaction_mode))
-        _set_if_not_none(params, "autonomyLevel", _enum_value(autonomy_level))
-        _set_if_not_none(params, "specModeModelId", spec_mode_model_id)
-        _set_if_not_none(
-            params,
-            "specModeReasoningEffort",
-            _enum_value(spec_mode_reasoning_effort),
+        params = _serialize_params(
+            UpdateSessionSettingsRequestParams(
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                autonomy_mode=autonomy_mode,
+                interaction_mode=interaction_mode,
+                autonomy_level=autonomy_level,
+                spec_mode_model_id=spec_mode_model_id,
+                spec_mode_reasoning_effort=spec_mode_reasoning_effort,
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+            )
         )
-        _set_if_not_none(params, "enabledToolIds", enabled_tool_ids)
-        _set_if_not_none(params, "disabledToolIds", disabled_tool_ids)
 
         await protocol.send_request(
             method=DroidServerMethod.UPDATE_SESSION_SETTINGS.value,
@@ -1074,9 +1109,12 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "enabledToolIds", enabled_tool_ids)
-        _set_if_not_none(params, "disabledToolIds", disabled_tool_ids)
+        params = _serialize_params(
+            ListToolsRequestParams(
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+            )
+        )
 
         response = await protocol.send_request(
             method=DroidServerMethod.LIST_TOOLS.value,
@@ -1116,7 +1154,7 @@ class DroidClient:
     async def close_session(
         self,
         *,
-        reason: str | None = None,
+        reason: Literal["clear", "logout", "prompt_input_exit", "other"] | None = None,
     ) -> CloseSessionResult:
         """Close the active session.
 
@@ -1138,15 +1176,16 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "reason", reason)
+        params = _serialize_params(CloseSessionRequestParams(reason=reason))
 
         response = await protocol.send_request(
             method=DroidServerMethod.CLOSE_SESSION.value,
             params=params,
         )
 
-        return CloseSessionResult.model_validate(response.get("result", {}))
+        result = CloseSessionResult.model_validate(response.get("result", {}))
+        self._session_id = None
+        return result
 
     async def compact_session(
         self,
@@ -1176,8 +1215,9 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "customInstructions", custom_instructions)
+        params = _serialize_params(
+            CompactSessionRequestParams(custom_instructions=custom_instructions)
+        )
 
         response = await protocol.send_request(
             method=DroidServerMethod.COMPACT_SESSION.value,
@@ -1191,7 +1231,7 @@ class DroidClient:
         self,
         *,
         title: str | None = None,
-        tags: list[dict[str, Any]] | None = None,
+        tags: list[SessionTag | dict[str, Any]] | None = None,
     ) -> ForkSessionResult:
         """Fork the active session into a new one.
 
@@ -1213,9 +1253,14 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "title", title)
-        _set_if_not_none(params, "tags", tags)
+        validated_tags = (
+            [SessionTag.model_validate(tag) for tag in tags]
+            if tags is not None
+            else None
+        )
+        params = _serialize_params(
+            ForkSessionRequestParams(title=title, tags=validated_tags)
+        )
 
         response = await protocol.send_request(
             method=DroidServerMethod.FORK_SESSION.value,
@@ -1244,9 +1289,11 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
+        params = _serialize_params(RenameSessionRequestParams(title=title))
+
         response = await protocol.send_request(
             method=DroidServerMethod.RENAME_SESSION.value,
-            params={"title": title},
+            params=params,
         )
 
         return RenameSessionResult.model_validate(response.get("result", {}))
@@ -1326,12 +1373,19 @@ class DroidClient:
             ConnectionError: If the client has been closed.
         """
         self._ensure_not_closed()
-        self._ensure_session()
+        session_id = self._ensure_session()
         protocol = self._ensure_protocol()
+
+        params = _serialize_params(
+            GetRewindInfoRequestParams(
+                session_id=session_id,
+                message_id=message_id,
+            )
+        )
 
         response = await protocol.send_request(
             method=DroidServerMethod.GET_REWIND_INFO.value,
-            params={"sessionId": self._session_id, "messageId": message_id},
+            params=params,
         )
 
         return GetRewindInfoResult.model_validate(response.get("result", {}))
@@ -1340,8 +1394,8 @@ class DroidClient:
         self,
         *,
         message_id: str,
-        files_to_restore: list[dict[str, Any]],
-        files_to_delete: list[dict[str, Any]],
+        files_to_restore: list[RewindFileSnapshot | dict[str, Any]],
+        files_to_delete: list[RewindFileCreation | dict[str, Any]],
         fork_title: str,
     ) -> ExecuteRewindResult:
         """Execute a rewind, forking the session at ``message_id``.
@@ -1366,18 +1420,28 @@ class DroidClient:
             ConnectionError: If the client has been closed.
         """
         self._ensure_not_closed()
-        self._ensure_session()
+        session_id = self._ensure_session()
         protocol = self._ensure_protocol()
+
+        validated_files_to_restore = [
+            RewindFileSnapshot.model_validate(file) for file in files_to_restore
+        ]
+        validated_files_to_delete = [
+            RewindFileCreation.model_validate(file) for file in files_to_delete
+        ]
+        params = _serialize_params(
+            ExecuteRewindRequestParams(
+                session_id=session_id,
+                message_id=message_id,
+                files_to_restore=validated_files_to_restore,
+                files_to_delete=validated_files_to_delete,
+                fork_title=fork_title,
+            )
+        )
 
         response = await protocol.send_request(
             method=DroidServerMethod.EXECUTE_REWIND.value,
-            params={
-                "sessionId": self._session_id,
-                "messageId": message_id,
-                "filesToRestore": files_to_restore,
-                "filesToDelete": files_to_delete,
-                "forkTitle": fork_title,
-            },
+            params=params,
             timeout=SESSION_INIT_TIMEOUT,
         )
 
@@ -1642,12 +1706,13 @@ class DroidClient:
                 "or call connect() to reconnect."
             )
 
-    def _ensure_session(self) -> None:
-        """Raise SessionError if no active session."""
+    def _ensure_session(self) -> str:
+        """Return the active session ID, or raise SessionError if absent."""
         if self._session_id is None:
             raise SessionError(
                 "No active session. Call initialize_session or load_session first."
             )
+        return self._session_id
 
     def _ensure_protocol(self) -> ProtocolEngine:
         """Return the protocol engine, raising if not connected."""
@@ -1660,6 +1725,15 @@ def _set_if_not_none(d: dict[str, Any], key: str, value: Any) -> None:
     """Set a key in the dict only if value is not None."""
     if value is not None:
         d[key] = value
+
+
+def _serialize_params(model: BaseModel) -> dict[str, Any]:
+    """Serialize validated request parameters to their wire aliases."""
+    return model.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
 
 
 def _enum_value(val: Any) -> Any:

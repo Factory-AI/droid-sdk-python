@@ -11,10 +11,17 @@ import asyncio
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from droid_sdk.client import DroidClient
+from droid_sdk.errors import SessionError
 from droid_sdk.protocol import COMPACTION_TIMEOUT
-from droid_sdk.schemas.client import OutputFormat
+from droid_sdk.schemas.client import (
+    OutputFormat,
+    RewindFileCreation,
+    RewindFileSnapshot,
+    SessionTag,
+)
 from droid_sdk.schemas.enums import DroidServerMethod
 from tests.helpers import InMemoryTransport, make_success_response
 
@@ -170,6 +177,26 @@ class TestSessionLifecycle:
 
         assert sent["method"] == DroidServerMethod.CLOSE_SESSION.value
         assert sent["params"]["reason"] == "clear"
+        assert client.session_id is None
+
+        sent_count = len(transport.sent_messages)
+        with pytest.raises(SessionError):
+            await client.get_context_stats()
+        assert len(transport.sent_messages) == sent_count
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_close_session_rejects_invalid_reason_locally(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+        sent_count = len(transport.sent_messages)
+
+        with pytest.raises(ValidationError):
+            await client.close_session(reason="invalid")  # type: ignore[arg-type]
+
+        assert client.session_id == "sess-1"
+        assert len(transport.sent_messages) == sent_count
 
         await client.close()
 
@@ -361,6 +388,59 @@ class TestRewind:
 
         await client.close()
 
+    @pytest.mark.asyncio
+    async def test_execute_rewind_serializes_typed_files(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        sent, _ = await _call(
+            transport,
+            client.execute_rewind(
+                message_id="msg-7",
+                files_to_restore=[
+                    RewindFileSnapshot(
+                        filePath="a.py",
+                        contentHash="abc",
+                        size=10,
+                    )
+                ],
+                files_to_delete=[RewindFileCreation(filePath="b.py")],
+                fork_title="rewound",
+            ),
+            {
+                "newSessionId": "sess-9",
+                "restoredCount": 1,
+                "deletedCount": 1,
+                "failedRestoreCount": 0,
+                "failedDeleteCount": 0,
+            },
+        )
+
+        assert sent["params"]["filesToRestore"] == [
+            {"filePath": "a.py", "contentHash": "abc", "size": 10}
+        ]
+        assert sent["params"]["filesToDelete"] == [{"filePath": "b.py"}]
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_execute_rewind_rejects_malformed_files_locally(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+        sent_count = len(transport.sent_messages)
+
+        with pytest.raises(ValidationError):
+            await client.execute_rewind(
+                message_id="msg-7",
+                files_to_restore=[{"filePath": "a.py", "size": 10}],
+                files_to_delete=[],
+                fork_title="rewound",
+            )
+
+        assert len(transport.sent_messages) == sent_count
+
+        await client.close()
+
 
 # ---------------------------------------------------------------------------
 # New request fields (disabled_tool_ids, output_format)
@@ -448,5 +528,42 @@ class TestNewRequestFields:
             "type": "json_schema",
             "schema": schema,
         }
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_add_user_message_rejects_invalid_output_format_locally(
+        self,
+    ) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+        sent_count = len(transport.sent_messages)
+
+        with pytest.raises(ValidationError):
+            await client.add_user_message(
+                text="Return an answer.",
+                output_format={"type": "text", "schema": {}},
+            )
+
+        assert len(transport.sent_messages) == sent_count
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_fork_session_serializes_typed_tags(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        sent, _ = await _call(
+            transport,
+            client.fork_session(
+                tags=[SessionTag(name="live-test", metadata={"source": "sdk"})]
+            ),
+            {"newSessionId": "sess-3"},
+        )
+
+        assert sent["params"]["tags"] == [
+            {"name": "live-test", "metadata": {"source": "sdk"}}
+        ]
 
         await client.close()
