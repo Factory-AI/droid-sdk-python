@@ -69,6 +69,16 @@ class DroidServerMethod(str, Enum):
     SUBMIT_MCP_AUTH_CODE = "droid.submit_mcp_auth_code"
     LIST_SKILLS = "droid.list_skills"
     SUBMIT_BUG_REPORT = "droid.submit_bug_report"
+    LIST_TOOLS = "droid.list_tools"
+    LIST_COMMANDS = "droid.list_commands"
+    CLOSE_SESSION = "droid.close_session"
+    COMPACT_SESSION = "droid.compact_session"
+    FORK_SESSION = "droid.fork_session"
+    RENAME_SESSION = "droid.rename_session"
+    GET_CONTEXT_STATS = "droid.get_context_stats"
+    GET_CONTEXT_BREAKDOWN = "droid.get_context_breakdown"
+    GET_REWIND_INFO = "droid.get_rewind_info"
+    EXECUTE_REWIND = "droid.execute_rewind"
 
 
 class DroidClientMethod(str, Enum):

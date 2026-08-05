@@ -174,7 +174,9 @@ def handle_message(msg: StreamMessage) -> None:
         print(f"Tool call: {msg.tool_name}({msg.tool_input})")
     elif isinstance(msg, ToolResult):
         status = "❌" if msg.is_error else "✅"
-        print(f"{status} {msg.content}")
+        # tool_use_id correlates the result with its ToolUse; tool_name is
+        # backfilled from that call (None if the call was never seen).
+        print(f"{status} [{msg.tool_use_id}] {msg.tool_name}: {msg.content}")
     elif isinstance(msg, ToolProgress):
         print(f"  ⏳ {msg.tool_name}: {msg.content}")
     elif isinstance(msg, WorkingStateChanged):
@@ -184,7 +186,9 @@ def handle_message(msg: StreamMessage) -> None:
     elif isinstance(msg, TurnComplete):
         print("\n--- Turn complete ---")
     elif isinstance(msg, ErrorEvent):
-        print(f"Error [{msg.error_type}]: {msg.message}")
+        # error_type is often the unhelpful "Error"; error_name exposes the
+        # nested error.name (e.g. "LLMInvalidRequestError") to branch on.
+        print(f"Error [{msg.error_name or msg.error_type}]: {msg.message}")
 ```
 
 ## Permission Handler
@@ -264,12 +268,52 @@ async def main():
 The main client class. Wraps a transport and provides typed async methods for all `droid.*` RPC methods.
 
 **Session methods:**
-- `initialize_session(...)` — Create a new session
+- `initialize_session(...)` — Create a new session (supports `enabled_tool_ids` and `disabled_tool_ids`)
 - `load_session(session_id=...)` — Load an existing session
-- `add_user_message(text=...)` — Send a user message
+- `add_user_message(text=..., output_format=...)` — Send a user message, optionally with a structured-output (JSON Schema) contract
 - `interrupt_session()` — Interrupt the current session
 - `kill_worker_session(worker_session_id=...)` — Kill a worker session
-- `update_session_settings(...)` — Update session settings
+- `update_session_settings(...)` — Update session settings (supports `enabled_tool_ids`/`disabled_tool_ids`)
+- `close_session(reason=...)` — Close the active session
+- `compact_session(custom_instructions=...)` — Compact the conversation to reclaim context
+- `fork_session(title=..., tags=...)` — Fork the session into a new one
+- `rename_session(title=...)` — Rename the session
+
+**Discovery methods:**
+- `list_tools(...)` — List native CLI tools with `default_allowed`/`currently_allowed` (useful for locking the tool set down)
+- `list_commands()` — List custom slash commands
+
+**Context and rewind methods:**
+- `get_context_stats()` — Context-window usage (used/remaining/limit)
+- `get_context_breakdown()` — Per-category/skill/MCP/droid token breakdown
+- `get_rewind_info(message_id=...)` — Restorable/created/evicted files for a rewind point
+- `execute_rewind(...)` — Rewind to a message, forking the session
+
+**Locking the tool set down:**
+
+```python
+# enabled_tool_ids is additive, so pass an explicit disable list to
+# actually restrict native tools. list_tools() lets you verify the result.
+catalog = await client.list_tools()
+tool_ids = [t.id for t in catalog.tools]
+await client.update_session_settings(enabled_tool_ids=[], disabled_tool_ids=tool_ids)
+```
+
+**Structured output:**
+
+```python
+await client.add_user_message(
+    text="Return an answer.",
+    output_format={
+        "type": "json_schema",
+        "schema": {
+            "type": "object",
+            "properties": {"answer": {"type": "integer"}},
+            "required": ["answer"],
+        },
+    },
+)
+```
 
 **MCP methods:**
 - `toggle_mcp_server(...)` — Enable/disable an MCP server
@@ -308,7 +352,16 @@ Protocol (interface) that all transport implementations must satisfy. Use this t
 uv sync
 
 # Run tests
-uv run pytest
+uv run --group dev python -m pytest
+
+# Run opt-in tests against the installed, authenticated droid exec CLI.
+# These create real sessions and consume model usage.
+DROID_LIVE_TESTS=1 uv run --group dev python -m pytest \
+  tests/test_live_droid_exec.py -v
+
+# Override the executable path when droid is not on PATH.
+DROID_LIVE_TESTS=1 DROID_EXEC_PATH=/path/to/droid \
+  uv run --group dev python -m pytest tests/test_live_droid_exec.py -v
 
 # Type check (strict mode)
 uv run mypy --strict src/

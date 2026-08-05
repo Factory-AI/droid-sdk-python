@@ -86,19 +86,35 @@ class ToolUse:
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
-    """The result returned from a tool execution."""
+    """The result returned from a tool execution.
 
-    tool_name: str
+    ``tool_name`` is ``None`` when the name is unknown. The
+    ``tool_result`` notification does not carry the tool name, so
+    :meth:`~droid_sdk.client.DroidClient.receive_response` backfills it
+    from the matching ``tool_use`` (correlated via ``tool_use_id``) when
+    that call was seen earlier in the turn. It stays ``None`` when no
+    match is available, which is distinct from a tool that reported an
+    empty name. ``tool_use_id`` is optional for compatibility with
+    callers that construct stream events directly.
+    """
+
+    tool_name: str | None
     content: str | list[Any]
     is_error: bool
+    tool_use_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ToolProgress:
-    """A streaming progress update from a tool execution."""
+    """A streaming progress update from a tool execution.
+
+    ``tool_use_id`` is optional for compatibility with callers that
+    construct stream events directly.
+    """
 
     tool_name: str
     content: str
+    tool_use_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,10 +143,20 @@ class TurnComplete:
 
 @dataclass(frozen=True, slots=True)
 class ErrorEvent:
-    """An error event from the droid process."""
+    """An error event from the droid process.
+
+    ``error_type`` mirrors the top-level ``errorType`` field, which is
+    frequently the unhelpful discriminator ``"Error"``. ``error_name``
+    exposes the nested ``error.name`` the protocol carries (for example
+    ``"LLMInvalidRequestError"``), giving callers a stable value to
+    branch on. ``error_detail`` holds the full nested error payload when
+    present.
+    """
 
     message: str
     error_type: str
+    error_name: str | None = field(default=None)
+    error_detail: dict[str, Any] | None = field(default=None)
 
 
 StreamMessage = (
@@ -187,8 +213,11 @@ def _notification_to_stream_message(
             content = list(notification.content)
         else:
             content = str(notification.content)
+        # The tool_result notification carries no tool name; leave it None
+        # so receive_response() can backfill it from the matching tool_use.
         return ToolResult(
-            tool_name="",
+            tool_name=None,
+            tool_use_id=notification.tool_use_id,
             content=content,
             is_error=bool(notification.is_error),
         )
@@ -199,6 +228,7 @@ def _notification_to_stream_message(
         text = update.text or update.status or update.details or ""
         return ToolProgress(
             tool_name=notification.tool_name,
+            tool_use_id=notification.tool_use_id,
             content=text,
         )
 
@@ -217,9 +247,16 @@ def _notification_to_stream_message(
         )
 
     if isinstance(notification, ErrorNotification):
+        error_name: str | None = None
+        error_detail: dict[str, Any] | None = None
+        if notification.error is not None:
+            error_name = notification.error.name
+            error_detail = notification.error.model_dump(by_alias=True)
         return ErrorEvent(
             message=notification.message,
             error_type=notification.error_type.value,
+            error_name=error_name,
+            error_detail=error_detail,
         )
 
     if isinstance(notification, CreateMessageNotification):

@@ -77,7 +77,7 @@ class TestConstants:
 
 
 ENUM_MEMBER_COUNTS: list[tuple[type[Enum], int]] = [
-    (DroidServerMethod, 19),
+    (DroidServerMethod, 29),
     (DroidClientMethod, 3),
     (SessionNotificationType, 20),
     (ToolConfirmationOutcome, 8),
@@ -217,6 +217,16 @@ REPRESENTATIVE_VALUES: list[tuple[type[Enum], str, Any]] = [
     (DroidServerMethod, "SUBMIT_MCP_AUTH_CODE", "droid.submit_mcp_auth_code"),
     (DroidServerMethod, "LIST_SKILLS", "droid.list_skills"),
     (DroidServerMethod, "SUBMIT_BUG_REPORT", "droid.submit_bug_report"),
+    (DroidServerMethod, "LIST_TOOLS", "droid.list_tools"),
+    (DroidServerMethod, "LIST_COMMANDS", "droid.list_commands"),
+    (DroidServerMethod, "CLOSE_SESSION", "droid.close_session"),
+    (DroidServerMethod, "COMPACT_SESSION", "droid.compact_session"),
+    (DroidServerMethod, "FORK_SESSION", "droid.fork_session"),
+    (DroidServerMethod, "RENAME_SESSION", "droid.rename_session"),
+    (DroidServerMethod, "GET_CONTEXT_STATS", "droid.get_context_stats"),
+    (DroidServerMethod, "GET_CONTEXT_BREAKDOWN", "droid.get_context_breakdown"),
+    (DroidServerMethod, "GET_REWIND_INFO", "droid.get_rewind_info"),
+    (DroidServerMethod, "EXECUTE_REWIND", "droid.execute_rewind"),
     # DroidClientMethod
     (DroidClientMethod, "SESSION_NOTIFICATION", "droid.session_notification"),
     (DroidClientMethod, "REQUEST_PERMISSION", "droid.request_permission"),

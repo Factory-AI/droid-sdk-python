@@ -52,6 +52,9 @@ DEFAULT_REQUEST_TIMEOUT: Final[float] = 30.0
 SESSION_INIT_TIMEOUT: Final[float] = 60.0
 """Extended timeout for session initialization (60 seconds)."""
 
+COMPACTION_TIMEOUT: Final[float] = 240.0
+"""Extended timeout for session compaction (4 minutes)."""
+
 MCP_AUTH_TIMEOUT: Final[float] = 300.0
 """Extended timeout for MCP OAuth authentication (5 minutes)."""
 
@@ -631,6 +634,7 @@ class ProtocolEngine:
 
 
 __all__ = [
+    "COMPACTION_TIMEOUT",
     "DEFAULT_REQUEST_TIMEOUT",
     "MCP_AUTH_TIMEOUT",
     "SESSION_INIT_TIMEOUT",

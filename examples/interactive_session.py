@@ -337,6 +337,8 @@ async def main(cwd: str, exec_path: str) -> None:
                             )
             return ToolConfirmationOutcome.ProceedOnce.value
 
+        client.set_permission_handler(handle_permission)
+
         # Initialize session
         print(f"Executable: {exec_path}")
         print(f"Working directory: {cwd}")

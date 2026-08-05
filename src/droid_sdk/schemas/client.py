@@ -1,10 +1,10 @@
 """Client→server request/response Pydantic schemas for the Factory Droid protocol.
 
-All 19 client→server RPC method request/response pairs, plus supporting types
+All 29 client→server RPC method request/response pairs, plus supporting types
 and the ClientRequest discriminated union.
 
 Ported from TypeScript source:
-- packages/common/src/droid/schemas/client.ts
+- packages/droid-sdk-core/src/protocol/droid/schemas/client.ts
 """
 
 from __future__ import annotations
@@ -70,7 +70,41 @@ __all__ = [
     "ClearMcpAuthResponse",
     "ClearMcpAuthResult",
     "ClientRequest",
+    "CloseSessionRequest",
+    "CloseSessionRequestParams",
+    "CloseSessionResponse",
+    "CloseSessionResult",
+    "CompactSessionRequest",
+    "CompactSessionRequestParams",
+    "CompactSessionResponse",
+    "CompactSessionResult",
+    "ContextBreakdownCategory",
+    "ContextBreakdownDroidEntry",
+    "ContextBreakdownMcpServerEntry",
+    "ContextBreakdownSkillEntry",
+    "CustomCommandInfo",
     "DocumentSource",
+    "ExecToolInfo",
+    "ExecuteRewindRequest",
+    "ExecuteRewindRequestParams",
+    "ExecuteRewindResponse",
+    "ExecuteRewindResult",
+    "ForkSessionRequest",
+    "ForkSessionRequestParams",
+    "ForkSessionResponse",
+    "ForkSessionResult",
+    "GetContextBreakdownRequest",
+    "GetContextBreakdownRequestParams",
+    "GetContextBreakdownResponse",
+    "GetContextBreakdownResult",
+    "GetContextStatsRequest",
+    "GetContextStatsRequestParams",
+    "GetContextStatsResponse",
+    "GetContextStatsResult",
+    "GetRewindInfoRequest",
+    "GetRewindInfoRequestParams",
+    "GetRewindInfoResponse",
+    "GetRewindInfoResult",
     "GitRepoInfo",
     "HttpHeader",
     "HttpMcpConfig",
@@ -86,6 +120,10 @@ __all__ = [
     "KillWorkerSessionRequestParams",
     "KillWorkerSessionResponse",
     "KillWorkerSessionResult",
+    "ListCommandsRequest",
+    "ListCommandsRequestParams",
+    "ListCommandsResponse",
+    "ListCommandsResult",
     "ListMcpRegistryRequest",
     "ListMcpRegistryRequestParams",
     "ListMcpRegistryResponse",
@@ -102,15 +140,27 @@ __all__ = [
     "ListSkillsRequestParams",
     "ListSkillsResponse",
     "ListSkillsResult",
+    "ListToolsRequest",
+    "ListToolsRequestParams",
+    "ListToolsResponse",
+    "ListToolsResult",
     "LoadSessionRequest",
     "LoadSessionRequestParams",
     "LoadSessionResponse",
     "LoadSessionResult",
     "MissionSnapshot",
+    "OutputFormat",
     "RemoveMcpServerRequest",
     "RemoveMcpServerRequestParams",
     "RemoveMcpServerResponse",
     "RemoveMcpServerResult",
+    "RenameSessionRequest",
+    "RenameSessionRequestParams",
+    "RenameSessionResponse",
+    "RenameSessionResult",
+    "RewindEvictedFile",
+    "RewindFileCreation",
+    "RewindFileSnapshot",
     "SessionSettings",
     "SessionSource",
     "SessionTag",
@@ -189,6 +239,22 @@ class DocumentSource(BaseModel):
     """Optional additional MIME type info."""
 
 
+class OutputFormat(BaseModel):
+    """Structured-output contract for a user message or session.
+
+    Constrains the assistant's reply to a JSON value matching the given
+    JSON Schema.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    type: Literal["json_schema"]
+    """Output format type, always 'json_schema'."""
+
+    schema_: dict[str, Any] = Field(alias="schema")
+    """JSON Schema describing the required output shape."""
+
+
 class SessionTag(BaseModel):
     """Session tag metadata."""
 
@@ -199,6 +265,42 @@ class SessionTag(BaseModel):
 
     metadata: dict[str, str] | None = None
     """Optional key-value metadata."""
+
+
+class RewindFileSnapshot(BaseModel):
+    """A file snapshot that can be restored during a rewind."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    file_path: str = Field(alias="filePath")
+    """Path to the file."""
+
+    content_hash: str = Field(alias="contentHash")
+    """Content hash of the snapshot."""
+
+    size: int
+    """File size in bytes."""
+
+
+class RewindFileCreation(BaseModel):
+    """A file created after the rewind point (deleted on rewind)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    file_path: str = Field(alias="filePath")
+    """Path to the file."""
+
+
+class RewindEvictedFile(BaseModel):
+    """A file that cannot be restored, with the reason why."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    file_path: str = Field(alias="filePath")
+    """Path to the file."""
+
+    reason: str
+    """Why the file cannot be restored."""
 
 
 class SessionSource(BaseModel):
@@ -537,6 +639,9 @@ class InitializeSessionRequestParams(BaseModel):
     enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
     """Additional tool IDs to enable beyond defaults."""
 
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    """Tool IDs to disable (subtractive; applied on top of the default set)."""
+
     session_location: str | None = Field(default=None, alias="sessionLocation")
     """Session metadata location."""
 
@@ -588,6 +693,9 @@ class AddUserMessageRequestParams(BaseModel):
     files: list[DocumentSource] | None = None
     """Optional attached files."""
 
+    output_format: OutputFormat | None = Field(default=None, alias="outputFormat")
+    """Optional structured-output (JSON Schema) contract for the reply."""
+
 
 class InterruptSessionRequestParams(BaseModel):
     """Parameters for droid.interrupt_session request (empty)."""
@@ -635,6 +743,12 @@ class UpdateSessionSettingsRequestParams(BaseModel):
         default=None, alias="specModeReasoningEffort"
     )
     """Optional spec mode reasoning effort (nullable to clear)."""
+
+    enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
+    """Additional tool IDs to enable beyond defaults."""
+
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    """Tool IDs to disable (subtractive)."""
 
 
 class ToggleMcpServerRequestParams(BaseModel):
@@ -788,6 +902,108 @@ class SubmitBugReportRequestParams(BaseModel):
 
     client_logs: str | None = Field(default=None, alias="clientLogs")
     """Optional client log data."""
+
+
+class ListToolsRequestParams(BaseModel):
+    """Parameters for droid.list_tools request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
+    """Optional hypothetical additional tool IDs."""
+
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    """Optional hypothetical disabled tool IDs."""
+
+
+class ListCommandsRequestParams(BaseModel):
+    """Parameters for droid.list_commands request (empty)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class CloseSessionRequestParams(BaseModel):
+    """Parameters for droid.close_session request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    reason: Literal["clear", "logout", "prompt_input_exit", "other"] | None = None
+    """Optional reason for closing the session."""
+
+
+class CompactSessionRequestParams(BaseModel):
+    """Parameters for droid.compact_session request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    custom_instructions: str | None = Field(default=None, alias="customInstructions")
+    """Optional instructions for the compaction summary."""
+
+
+class ForkSessionRequestParams(BaseModel):
+    """Parameters for droid.fork_session request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    title: str | None = None
+    """Optional title for the fork."""
+
+    tags: list[SessionTag] | None = None
+    """Optional tags for the fork."""
+
+
+class RenameSessionRequestParams(BaseModel):
+    """Parameters for droid.rename_session request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    title: str
+    """New session title."""
+
+
+class GetContextStatsRequestParams(BaseModel):
+    """Parameters for droid.get_context_stats request (empty)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class GetContextBreakdownRequestParams(BaseModel):
+    """Parameters for droid.get_context_breakdown request (empty)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class GetRewindInfoRequestParams(BaseModel):
+    """Parameters for droid.get_rewind_info request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    session_id: str = Field(alias="sessionId")
+    """Session containing the rewind point."""
+
+    message_id: str = Field(alias="messageId")
+    """Message identifying the rewind point."""
+
+
+class ExecuteRewindRequestParams(BaseModel):
+    """Parameters for droid.execute_rewind request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    session_id: str = Field(alias="sessionId")
+    """Session containing the rewind point."""
+
+    message_id: str = Field(alias="messageId")
+    """Message identifying the rewind point."""
+
+    files_to_restore: list[RewindFileSnapshot] = Field(alias="filesToRestore")
+    """File snapshots to restore."""
+
+    files_to_delete: list[RewindFileCreation] = Field(alias="filesToDelete")
+    """Files to delete."""
+
+    fork_title: str = Field(alias="forkTitle")
+    """Title for the rewind fork."""
 
 
 # ============================================================
@@ -1021,6 +1237,86 @@ class SubmitBugReportRequest(JsonRpcRequest):
 
     params: SubmitBugReportRequestParams  # type: ignore[assignment]
     """Typed request parameters."""
+
+
+class ListToolsRequest(JsonRpcRequest):
+    """Request to list native CLI tools."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.LIST_TOOLS]
+    params: ListToolsRequestParams  # type: ignore[assignment]
+
+
+class ListCommandsRequest(JsonRpcRequest):
+    """Request to list custom slash commands."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.LIST_COMMANDS]
+    params: ListCommandsRequestParams  # type: ignore[assignment]
+
+
+class CloseSessionRequest(JsonRpcRequest):
+    """Request to close the active session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.CLOSE_SESSION]
+    params: CloseSessionRequestParams  # type: ignore[assignment]
+
+
+class CompactSessionRequest(JsonRpcRequest):
+    """Request to compact the active session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.COMPACT_SESSION]
+    params: CompactSessionRequestParams  # type: ignore[assignment]
+
+
+class ForkSessionRequest(JsonRpcRequest):
+    """Request to fork the active session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.FORK_SESSION]
+    params: ForkSessionRequestParams  # type: ignore[assignment]
+
+
+class RenameSessionRequest(JsonRpcRequest):
+    """Request to rename the active session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.RENAME_SESSION]
+    params: RenameSessionRequestParams  # type: ignore[assignment]
+
+
+class GetContextStatsRequest(JsonRpcRequest):
+    """Request for context-window usage statistics."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.GET_CONTEXT_STATS]
+    params: GetContextStatsRequestParams  # type: ignore[assignment]
+
+
+class GetContextBreakdownRequest(JsonRpcRequest):
+    """Request for detailed context-window usage."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.GET_CONTEXT_BREAKDOWN]
+    params: GetContextBreakdownRequestParams  # type: ignore[assignment]
+
+
+class GetRewindInfoRequest(JsonRpcRequest):
+    """Request for file restore information at a rewind point."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.GET_REWIND_INFO]
+    params: GetRewindInfoRequestParams  # type: ignore[assignment]
+
+
+class ExecuteRewindRequest(JsonRpcRequest):
+    """Request to execute a rewind and fork the session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.EXECUTE_REWIND]
+    params: ExecuteRewindRequestParams  # type: ignore[assignment]
 
 
 # ============================================================
@@ -1301,6 +1597,280 @@ class SubmitBugReportResult(BaseModel):
 
 
 # ============================================================
+# Tool / command discovery (droid.list_tools, droid.list_commands)
+# ============================================================
+
+
+class ExecToolInfo(BaseModel):
+    """A native CLI tool entry returned by droid.list_tools."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    id: str
+    """Tool identifier (the ID used in enabled/disabled tool lists)."""
+
+    llm_id: str | None = Field(default=None, alias="llmId")
+    """Identifier presented to the model."""
+
+    display_name: str | None = Field(default=None, alias="displayName")
+    """Human-readable display name."""
+
+    description: str | None = None
+    """Tool description."""
+
+    category: str | None = None
+    """Tool catalog category."""
+
+    default_allowed: bool = Field(alias="defaultAllowed")
+    """Whether the tool is allowed by default."""
+
+    currently_allowed: bool = Field(alias="currentlyAllowed")
+    """Whether the tool is currently allowed given the session config."""
+
+
+class ListToolsResult(BaseModel):
+    """Result for droid.list_tools response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    tools: list[ExecToolInfo]
+    """Available native CLI tools with their allow-state."""
+
+
+class CustomCommandInfo(BaseModel):
+    """A custom slash command entry returned by droid.list_commands."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str
+    """Command name."""
+
+    description: str
+    """Command description."""
+
+    argument_hint: str | None = Field(default=None, alias="argumentHint")
+    """Optional argument hint."""
+
+    is_executable: bool | None = Field(default=None, alias="isExecutable")
+    """Whether the command is backed by an executable script."""
+
+
+class ListCommandsResult(BaseModel):
+    """Result for droid.list_commands response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    commands: list[CustomCommandInfo]
+    """Available custom slash commands."""
+
+
+# ============================================================
+# Session lifecycle (close / compact / fork / rename)
+# ============================================================
+
+
+class CloseSessionResult(BaseModel):
+    """Result for droid.close_session response (empty)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+
+class CompactSessionResult(BaseModel):
+    """Result for droid.compact_session response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    new_session_id: str = Field(alias="newSessionId")
+    """Session ID created by the compaction."""
+
+    removed_count: int = Field(alias="removedCount")
+    """Number of messages removed by the compaction."""
+
+
+class ForkSessionResult(BaseModel):
+    """Result for droid.fork_session response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    new_session_id: str = Field(alias="newSessionId")
+    """Session ID of the fork."""
+
+
+class RenameSessionResult(BaseModel):
+    """Result for droid.rename_session response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    success: bool
+    """Whether the rename succeeded."""
+
+
+# ============================================================
+# Context stats / breakdown
+# ============================================================
+
+
+class GetContextStatsResult(BaseModel):
+    """Result for droid.get_context_stats response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    used: int
+    """Tokens used in the context window."""
+
+    remaining: int
+    """Tokens remaining in the context window."""
+
+    limit: int
+    """Total context window size."""
+
+    accuracy: str
+    """Accuracy of the estimate (server-driven string enum)."""
+
+    updated_at: str = Field(alias="updatedAt")
+    """ISO 8601 timestamp of the last update."""
+
+
+class ContextBreakdownCategory(BaseModel):
+    """A top-level context usage category."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str
+    """Category name."""
+
+    tokens: int
+    """Tokens attributed to the category."""
+
+    color_key: str = Field(alias="colorKey")
+    """UI color key for the category."""
+
+
+class ContextBreakdownSkillEntry(BaseModel):
+    """A per-skill context usage entry."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str
+    """Skill name."""
+
+    location: str
+    """Skill location."""
+
+    tokens: int
+    """Tokens attributed to the skill."""
+
+
+class ContextBreakdownMcpServerEntry(BaseModel):
+    """A per-MCP-server context usage entry."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str
+    """MCP server name."""
+
+    tool_count: int = Field(alias="toolCount")
+    """Number of tools contributed by the server."""
+
+    tokens: int
+    """Tokens attributed to the server."""
+
+
+class ContextBreakdownDroidEntry(BaseModel):
+    """A per-droid context usage entry."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str
+    """Droid name."""
+
+    location: str
+    """Droid location."""
+
+    tokens: int
+    """Tokens attributed to the droid."""
+
+
+class GetContextBreakdownResult(BaseModel):
+    """Result for droid.get_context_breakdown response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    model_id: str = Field(alias="modelId")
+    """Active model identifier."""
+
+    model_display_name: str = Field(alias="modelDisplayName")
+    """Human-readable model name."""
+
+    context_budget: int = Field(alias="contextBudget")
+    """Total context budget in tokens."""
+
+    last_call_compaction_tokens: int | None = Field(
+        default=None, alias="lastCallCompactionTokens"
+    )
+    """Tokens saved by compaction on the last call, if any."""
+
+    used_tokens: int = Field(alias="usedTokens")
+    """Total tokens used."""
+
+    free_tokens: int = Field(alias="freeTokens")
+    """Total tokens free."""
+
+    categories: list[ContextBreakdownCategory]
+    """Top-level usage categories."""
+
+    skills: list[ContextBreakdownSkillEntry]
+    """Per-skill usage."""
+
+    mcp_servers: list[ContextBreakdownMcpServerEntry] = Field(alias="mcpServers")
+    """Per-MCP-server usage."""
+
+    droids: list[ContextBreakdownDroidEntry]
+    """Per-droid usage."""
+
+
+# ============================================================
+# Rewind (droid.get_rewind_info, droid.execute_rewind)
+# ============================================================
+
+
+class GetRewindInfoResult(BaseModel):
+    """Result for droid.get_rewind_info response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    available_files: list[RewindFileSnapshot] = Field(alias="availableFiles")
+    """Files that can be restored."""
+
+    created_files: list[RewindFileCreation] = Field(alias="createdFiles")
+    """Files created after the rewind point (candidates for deletion)."""
+
+    evicted_files: list[RewindEvictedFile] = Field(alias="evictedFiles")
+    """Files that cannot be restored."""
+
+
+class ExecuteRewindResult(BaseModel):
+    """Result for droid.execute_rewind response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    new_session_id: str = Field(alias="newSessionId")
+    """Session ID created by the rewind (a fork)."""
+
+    restored_count: int = Field(alias="restoredCount")
+    """Number of files restored."""
+
+    deleted_count: int = Field(alias="deletedCount")
+    """Number of files deleted."""
+
+    failed_restore_count: int = Field(alias="failedRestoreCount")
+    """Number of files that failed to restore."""
+
+    failed_delete_count: int = Field(alias="failedDeleteCount")
+    """Number of files that failed to delete."""
+
+
+# ============================================================
 # Response schemas (union of success + failure)
 # ============================================================
 
@@ -1438,6 +2008,56 @@ class _SubmitBugReportResponseSuccess(JsonRpcResponseSuccess):
     result: SubmitBugReportResult  # type: ignore[assignment]
 
 
+class _ListToolsResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ListToolsResult  # type: ignore[assignment]
+
+
+class _ListCommandsResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ListCommandsResult  # type: ignore[assignment]
+
+
+class _CloseSessionResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: CloseSessionResult  # type: ignore[assignment]
+
+
+class _CompactSessionResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: CompactSessionResult  # type: ignore[assignment]
+
+
+class _ForkSessionResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ForkSessionResult  # type: ignore[assignment]
+
+
+class _RenameSessionResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: RenameSessionResult  # type: ignore[assignment]
+
+
+class _GetContextStatsResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: GetContextStatsResult  # type: ignore[assignment]
+
+
+class _GetContextBreakdownResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: GetContextBreakdownResult  # type: ignore[assignment]
+
+
+class _GetRewindInfoResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: GetRewindInfoResult  # type: ignore[assignment]
+
+
+class _ExecuteRewindResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ExecuteRewindResult  # type: ignore[assignment]
+
+
 # Union response types (success | failure)
 
 InitializeSessionResponse = _InitializeSessionResponseSuccess | JsonRpcResponseFailure
@@ -1463,10 +2083,22 @@ ListMcpServersResponse = _ListMcpServersResponseSuccess | JsonRpcResponseFailure
 ToggleMcpToolResponse = _ToggleMcpToolResponseSuccess | JsonRpcResponseFailure
 ListSkillsResponse = _ListSkillsResponseSuccess | JsonRpcResponseFailure
 SubmitBugReportResponse = _SubmitBugReportResponseSuccess | JsonRpcResponseFailure
+ListToolsResponse = _ListToolsResponseSuccess | JsonRpcResponseFailure
+ListCommandsResponse = _ListCommandsResponseSuccess | JsonRpcResponseFailure
+CloseSessionResponse = _CloseSessionResponseSuccess | JsonRpcResponseFailure
+CompactSessionResponse = _CompactSessionResponseSuccess | JsonRpcResponseFailure
+ForkSessionResponse = _ForkSessionResponseSuccess | JsonRpcResponseFailure
+RenameSessionResponse = _RenameSessionResponseSuccess | JsonRpcResponseFailure
+GetContextStatsResponse = _GetContextStatsResponseSuccess | JsonRpcResponseFailure
+GetContextBreakdownResponse = (
+    _GetContextBreakdownResponseSuccess | JsonRpcResponseFailure
+)
+GetRewindInfoResponse = _GetRewindInfoResponseSuccess | JsonRpcResponseFailure
+ExecuteRewindResponse = _ExecuteRewindResponseSuccess | JsonRpcResponseFailure
 
 
 # ============================================================
-# ClientRequest discriminated union over all 19 request types
+# ClientRequest discriminated union over all 29 request types
 # ============================================================
 
 ClientRequestUnion = Annotated[
@@ -1488,13 +2120,23 @@ ClientRequestUnion = Annotated[
     | ListMcpServersRequest
     | ToggleMcpToolRequest
     | ListSkillsRequest
-    | SubmitBugReportRequest,
+    | SubmitBugReportRequest
+    | ListToolsRequest
+    | ListCommandsRequest
+    | CloseSessionRequest
+    | CompactSessionRequest
+    | ForkSessionRequest
+    | RenameSessionRequest
+    | GetContextStatsRequest
+    | GetContextBreakdownRequest
+    | GetRewindInfoRequest
+    | ExecuteRewindRequest,
     Field(discriminator="method"),
 ]
 
 
 class ClientRequest(RootModel[ClientRequestUnion]):
-    """Discriminated union over all 19 client→server request types.
+    """Discriminated union over all 29 client→server request types.
 
     Dispatches on the ``method`` field to the appropriate request model.
     """
