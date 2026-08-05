@@ -1,0 +1,77 @@
+src/droid_sdk/stream.py
+  305d70de0859c6c8 89-99,101,104,109,111-113,117,146,148-154,158-159,216-217,219,231,250-254,258-259
+  7c96c0428e089b49 220
+tests/test_live_droid_exec.py
+  305d70de0859c6c8 1-268
+tests/test_stream.py
+  305d70de0859c6c8 77-86,90-95,97,105-110,114-124,129,135-142,147-151,153,160,253-254,256-269,275,412,431-434,459,551-580
+src/droid_sdk/client.py
+  305d70de0859c6c8 12,25,39-40,42-46,48,53,55,57,78,287,315-318,358,425,436-439,454-460,531-532,547-548,571-572,1046-1385,1424-1426,1450,1454-1463
+  7c96c0428e089b49 79
+src/droid_sdk/schemas/enums.py
+  305d70de0859c6c8 72-81
+tests/test_extended_client_schemas.py
+  305d70de0859c6c8 1-139
+src/droid_sdk/schemas/__init__.py
+  305d70de0859c6c8 83-95,97-117,133-136,153-156,162,167-173,363-370,373-376,379,399-403,409-424,453-456,473-476,516,528-531,535-537
+examples/interactive_session.py
+  305d70de0859c6c8 340-341
+tests/test_client_protocol_surface.py
+  305d70de0859c6c8 1-452
+src/droid_sdk/protocol.py
+  305d70de0859c6c8 55-57,637
+tests/test_receive_response.py
+  305d70de0859c6c8 1156-1396
+README.md
+  305d70de0859c6c8 177-179,189-191,271,273,276-316,355,357-364
+src/droid_sdk/schemas/client.py
+  305d70de0859c6c8 3,7,73-85,87-107,123-125,143-146,152,157-163,242-257,270-305,642-644,696-698,747-752,907-1008,1242-1321,1600-1872,2011-2060,2086-2097,2101,2124-2133,2139
+tests/test_enums.py
+  305d70de0859c6c8 80,220-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "1e6e912df788b6ee8150ea0fefdb729b5d76fb77",
+  "prompts": {
+    "305d70de0859c6c8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "1741d342-c830-4f84-9b9b-a1739f48ae0f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 2558,
+      "total_deletions": 105,
+      "accepted_lines": 2472,
+      "overriden_lines": 0
+    },
+    "7c96c0428e089b49": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "fc897641-7bfd-444b-a1f4-d7a0e1cbff7e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "f76488c5f320515f": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e20b9b0f-df1e-42c9-bac3-bdbfc1f6237f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 133,
+      "total_deletions": 0,
+      "accepted_lines": 132,
+      "overriden_lines": 0
+    }
+  }
+}
