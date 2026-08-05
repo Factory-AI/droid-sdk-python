@@ -1,0 +1,36 @@
+pyproject.toml
+  305d70de0859c6c8 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "d4769da1acfa27198cdcea55027bdeb112d900bf",
+  "prompts": {
+    "305d70de0859c6c8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "1741d342-c830-4f84-9b9b-a1739f48ae0f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "f76488c5f320515f": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e20b9b0f-df1e-42c9-bac3-bdbfc1f6237f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 132,
+      "overriden_lines": 0
+    }
+  }
+}
