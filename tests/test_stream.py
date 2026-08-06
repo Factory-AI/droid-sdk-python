@@ -74,11 +74,27 @@ class TestToolUseStream:
 class TestToolResult:
     """Tests for ToolResult dataclass."""
 
+    def test_legacy_constructor_remains_compatible(self) -> None:
+        from droid_sdk.stream import ToolResult
+
+        msg = ToolResult("read_file", "file contents", False)
+
+        assert msg.tool_name == "read_file"
+        assert msg.content == "file contents"
+        assert msg.is_error is False
+        assert msg.tool_use_id is None
+
     def test_construction_string_content(self) -> None:
         from droid_sdk.stream import ToolResult
 
-        msg = ToolResult(tool_name="read_file", content="file contents", is_error=False)
+        msg = ToolResult(
+            tool_name="read_file",
+            tool_use_id="tu_1",
+            content="file contents",
+            is_error=False,
+        )
         assert msg.tool_name == "read_file"
+        assert msg.tool_use_id == "tu_1"
         assert msg.content == "file contents"
         assert msg.is_error is False
 
@@ -86,32 +102,62 @@ class TestToolResult:
         from droid_sdk.stream import ToolResult
 
         content: list[Any] = [{"type": "text", "text": "result"}]
-        msg = ToolResult(tool_name="execute", content=content, is_error=True)
+        msg = ToolResult(
+            tool_name="execute",
+            tool_use_id="tu_2",
+            content=content,
+            is_error=True,
+        )
         assert msg.content == content
         assert msg.is_error is True
+
+    def test_tool_name_optional(self) -> None:
+        from droid_sdk.stream import ToolResult
+
+        msg = ToolResult(
+            tool_name=None,
+            tool_use_id="tu_3",
+            content="x",
+            is_error=False,
+        )
+        assert msg.tool_name is None
 
     def test_field_names(self) -> None:
         from droid_sdk.stream import ToolResult
 
         names = {f.name for f in fields(ToolResult)}
-        assert names == {"tool_name", "content", "is_error"}
+        assert names == {"tool_name", "tool_use_id", "content", "is_error"}
 
 
 class TestToolProgress:
     """Tests for ToolProgress dataclass."""
 
+    def test_legacy_constructor_remains_compatible(self) -> None:
+        from droid_sdk.stream import ToolProgress
+
+        msg = ToolProgress("execute", "running step 2...")
+
+        assert msg.tool_name == "execute"
+        assert msg.content == "running step 2..."
+        assert msg.tool_use_id is None
+
     def test_construction(self) -> None:
         from droid_sdk.stream import ToolProgress
 
-        msg = ToolProgress(tool_name="execute", content="running step 2...")
+        msg = ToolProgress(
+            tool_name="execute",
+            tool_use_id="tu_1",
+            content="running step 2...",
+        )
         assert msg.tool_name == "execute"
+        assert msg.tool_use_id == "tu_1"
         assert msg.content == "running step 2..."
 
     def test_field_names(self) -> None:
         from droid_sdk.stream import ToolProgress
 
         names = {f.name for f in fields(ToolProgress)}
-        assert names == {"tool_name", "content"}
+        assert names == {"tool_name", "tool_use_id", "content"}
 
 
 class TestWorkingStateChanged:
@@ -204,12 +250,29 @@ class TestErrorEvent:
         msg = ErrorEvent(message="Something went wrong", error_type="ConnectionError")
         assert msg.message == "Something went wrong"
         assert msg.error_type == "ConnectionError"
+        assert msg.error_name is None
+        assert msg.error_detail is None
+
+    def test_construction_with_nested_error(self) -> None:
+        from droid_sdk.stream import ErrorEvent
+
+        msg = ErrorEvent(
+            message="Requested model was not found on the API provider",
+            error_type="Error",
+            error_name="LLMInvalidRequestError",
+            error_detail={"name": "LLMInvalidRequestError", "message": "..."},
+        )
+        assert msg.error_name == "LLMInvalidRequestError"
+        assert msg.error_detail == {
+            "name": "LLMInvalidRequestError",
+            "message": "...",
+        }
 
     def test_field_names(self) -> None:
         from droid_sdk.stream import ErrorEvent
 
         names = {f.name for f in fields(ErrorEvent)}
-        assert names == {"message", "error_type"}
+        assert names == {"message", "error_type", "error_name", "error_detail"}
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +409,7 @@ class TestNotificationToStreamMessage:
         assert result.is_error is False
 
     def test_tool_result_with_missing_tool_name(self) -> None:
-        """ToolResultNotification doesn't have toolName; we should get empty string."""
+        """ToolResultNotification has no toolName; converter yields None."""
         from droid_sdk.schemas.cli import SessionNotification
         from droid_sdk.stream import (
             ToolResult,
@@ -365,8 +428,10 @@ class TestNotificationToStreamMessage:
         notif = SessionNotification.model_validate(raw)
         result = _notification_to_stream_message(notif.params.notification)
         assert isinstance(result, ToolResult)
-        # ToolResultNotification doesn't carry tool_name, so it should be ""
-        assert result.tool_name == ""
+        # ToolResultNotification doesn't carry tool_name; None means "unknown"
+        # (distinct from a tool that reported an empty name).
+        assert result.tool_name is None
+        assert result.tool_use_id == "tu_1"
         assert result.is_error is True
 
     def test_tool_progress_update(self) -> None:
@@ -391,6 +456,7 @@ class TestNotificationToStreamMessage:
         result = _notification_to_stream_message(notif.params.notification)
         assert isinstance(result, ToolProgress)
         assert result.tool_name == "execute"
+        assert result.tool_use_id == "tu_2"
         assert result.content == "Compiling..."
 
     def test_tool_progress_update_fallback_content(self) -> None:
@@ -482,6 +548,36 @@ class TestNotificationToStreamMessage:
         assert isinstance(result, ErrorEvent)
         assert result.message == "Something went wrong"
         assert result.error_type == "ConnectionError"
+        assert result.error_name is None
+        assert result.error_detail is None
+
+    def test_error_notification_with_nested_error(self) -> None:
+        """The nested error.name is surfaced as error_name plus raw detail."""
+        from droid_sdk.schemas.cli import SessionNotification
+        from droid_sdk.stream import (
+            ErrorEvent,
+            _notification_to_stream_message,
+        )
+
+        raw = _make_session_notification(
+            SessionNotificationType.ERROR,
+            {
+                "message": "Requested model was not found on the API provider",
+                "errorType": "Error",
+                "timestamp": "2026-08-02T11:00:13.647Z",
+                "error": {
+                    "name": "LLMInvalidRequestError",
+                    "message": "Requested model was not found on the API provider",
+                },
+            },
+        )
+        notif = SessionNotification.model_validate(raw)
+        result = _notification_to_stream_message(notif.params.notification)
+        assert isinstance(result, ErrorEvent)
+        assert result.error_type == "Error"
+        assert result.error_name == "LLMInvalidRequestError"
+        assert result.error_detail is not None
+        assert result.error_detail["name"] == "LLMInvalidRequestError"
 
     def test_create_message_with_tool_use_blocks(self) -> None:
         from droid_sdk.schemas.cli import SessionNotification

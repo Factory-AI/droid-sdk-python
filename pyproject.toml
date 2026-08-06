@@ -1,6 +1,6 @@
 [project]
 name = "droid-sdk"
-version = "0.1.2"
+version = "0.1.3"
 description = "Python asyncio SDK for Factory Droid"
 readme = "README.md"
 license = {text = "Apache-2.0"}

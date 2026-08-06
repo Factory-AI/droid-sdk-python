@@ -1153,3 +1153,244 @@ class TestCompleteFlow:
         assert turn_complete.token_usage.output_tokens == 50
 
         await client.close()
+
+
+# ---------------------------------------------------------------------------
+# Tool-name backfill / correlation (issue #4)
+# ---------------------------------------------------------------------------
+
+
+class TestToolNameBackfill:
+    """receive_response() correlates tool_result/progress with tool_use."""
+
+    @pytest.mark.asyncio
+    async def test_tool_result_backfills_name_from_tool_use(self) -> None:
+        """A tool_result with no name is enriched from the matching tool_use."""
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        async def inject() -> None:
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "streaming_assistant_message"},
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.CREATE_MESSAGE,
+                    {
+                        "message": {
+                            "id": "msg1",
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": "tu_abc",
+                                    "name": "ToolSearch",
+                                    "input": {"query": "weather"},
+                                },
+                            ],
+                            "createdAt": 1700000000.0,
+                            "updatedAt": 1700000000.0,
+                        },
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.TOOL_RESULT,
+                    {
+                        "messageId": "msg2",
+                        "toolUseId": "tu_abc",
+                        "content": "Error: No tools matched",
+                        "isError": True,
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "idle"},
+                )
+            )
+
+        _fire_task(inject())
+
+        messages: list[StreamMessage] = []
+        async for msg in client.receive_response():
+            messages.append(msg)
+
+        results = [m for m in messages if isinstance(m, ToolResult)]
+        assert len(results) == 1
+        assert results[0].tool_use_id == "tu_abc"
+        assert results[0].tool_name == "ToolSearch"
+        assert results[0].is_error is True
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_tool_result_name_none_when_no_tool_use(self) -> None:
+        """Without a preceding tool_use, tool_name stays None (not '')."""
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        async def inject() -> None:
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "executing_tool"},
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.TOOL_RESULT,
+                    {
+                        "messageId": "msg2",
+                        "toolUseId": "tu_orphan",
+                        "content": "done",
+                        "isError": False,
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "idle"},
+                )
+            )
+
+        _fire_task(inject())
+
+        messages: list[StreamMessage] = []
+        async for msg in client.receive_response():
+            messages.append(msg)
+
+        results = [m for m in messages if isinstance(m, ToolResult)]
+        assert len(results) == 1
+        assert results[0].tool_use_id == "tu_orphan"
+        assert results[0].tool_name is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_tool_progress_carries_tool_use_id(self) -> None:
+        """ToolProgress exposes the correlating tool_use_id."""
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        async def inject() -> None:
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "executing_tool"},
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.TOOL_PROGRESS_UPDATE,
+                    {
+                        "toolUseId": "tu_9",
+                        "toolName": "execute",
+                        "update": {"type": "status", "text": "Running..."},
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "idle"},
+                )
+            )
+
+        _fire_task(inject())
+
+        messages: list[StreamMessage] = []
+        async for msg in client.receive_response():
+            messages.append(msg)
+
+        progress = [m for m in messages if isinstance(m, ToolProgress)]
+        assert len(progress) == 1
+        assert progress[0].tool_use_id == "tu_9"
+        assert progress[0].tool_name == "execute"
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_tool_progress_backfills_empty_name(self) -> None:
+        """An empty toolName on progress is backfilled from the tool_use."""
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        async def inject() -> None:
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "streaming_assistant_message"},
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.CREATE_MESSAGE,
+                    {
+                        "message": {
+                            "id": "msg1",
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": "tu_p",
+                                    "name": "ToolSearch",
+                                    "input": {},
+                                },
+                            ],
+                            "createdAt": 1700000000.0,
+                            "updatedAt": 1700000000.0,
+                        },
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.TOOL_PROGRESS_UPDATE,
+                    {
+                        "toolUseId": "tu_p",
+                        "toolName": "",
+                        "update": {"type": "status", "text": "working"},
+                    },
+                )
+            )
+            await asyncio.sleep(0)
+            transport.inject_message(
+                _make_session_notification(
+                    SessionNotificationType.DROID_WORKING_STATE_CHANGED,
+                    {"newState": "idle"},
+                )
+            )
+
+        _fire_task(inject())
+
+        messages: list[StreamMessage] = []
+        async for msg in client.receive_response():
+            messages.append(msg)
+
+        progress = [m for m in messages if isinstance(m, ToolProgress)]
+        assert len(progress) == 1
+        assert progress[0].tool_use_id == "tu_p"
+        # Empty name on the wire is backfilled from the matching tool_use.
+        assert progress[0].tool_name == "ToolSearch"
+
+        await client.close()

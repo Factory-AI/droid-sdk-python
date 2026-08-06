@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import logging
 from collections.abc import AsyncIterator, Callable
 from types import TracebackType  # noqa: TC003
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -21,6 +22,7 @@ from droid_sdk.errors import (
     SessionError,
 )
 from droid_sdk.protocol import (
+    COMPACTION_TIMEOUT,
     MCP_AUTH_TIMEOUT,
     SESSION_INIT_TIMEOUT,
     ProtocolEngine,
@@ -30,22 +32,48 @@ from droid_sdk.schemas.cli import (
 )
 from droid_sdk.schemas.client import (
     AddMcpServerResult,
+    AddUserMessageRequestParams,
     AuthenticateMcpServerResult,
     Base64ImageSource,
     CancelMcpAuthResult,
     ClearMcpAuthResult,
+    CloseSessionRequestParams,
+    CloseSessionResult,
+    CompactSessionRequestParams,
+    CompactSessionResult,
     DocumentSource,
+    ExecuteRewindRequestParams,
+    ExecuteRewindResult,
+    ForkSessionRequestParams,
+    ForkSessionResult,
+    GetContextBreakdownResult,
+    GetContextStatsResult,
+    GetRewindInfoRequestParams,
+    GetRewindInfoResult,
+    InitializeSessionRequestParams,
     InitializeSessionResult,
+    ListCommandsResult,
     ListMcpRegistryResult,
     ListMcpServersResult,
     ListMcpToolsResult,
     ListSkillsResult,
+    ListToolsRequestParams,
+    ListToolsResult,
+    LoadSessionRequestParams,
     LoadSessionResult,
+    OutputFormat,
     RemoveMcpServerResult,
+    RenameSessionRequestParams,
+    RenameSessionResult,
+    RewindFileCreation,
+    RewindFileSnapshot,
+    SessionSource,
+    SessionTag,
     SubmitBugReportResult,
     SubmitMcpAuthCodeResult,
     ToggleMcpServerResult,
     ToggleMcpToolResult,
+    UpdateSessionSettingsRequestParams,
 )
 from droid_sdk.schemas.enums import (
     AutonomyLevel,
@@ -62,11 +90,16 @@ from droid_sdk.schemas.enums import (
 from droid_sdk.stream import (
     StreamMessage,
     TokenUsageUpdate,
+    ToolProgress,
+    ToolResult,
     TurnComplete,
     WorkingStateChanged,
     _notification_to_stream_message,
 )
 from droid_sdk.types import DroidClientTransport  # noqa: TC001
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -269,9 +302,10 @@ class DroidClient:
         decomp_mission_id: str | None = None,
         skip_permissions_unsafe: bool | None = None,
         enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
         session_location: str | None = None,
-        session_source: dict[str, Any] | None = None,
-        tags: list[dict[str, Any]] | None = None,
+        session_source: SessionSource | dict[str, Any] | None = None,
+        tags: list[SessionTag | dict[str, Any]] | None = None,
         mcp_oauth_callback_uri: str | None = None,
     ) -> InitializeSessionResult:
         """Initialize a new session.
@@ -296,7 +330,10 @@ class DroidClient:
             decomp_session_type: Session type for mission decomposition.
             decomp_mission_id: Mission ID for worker sessions.
             skip_permissions_unsafe: Skip permission checks.
-            enabled_tool_ids: Additional tool IDs to enable.
+            enabled_tool_ids: Additional tool IDs to enable beyond defaults.
+            disabled_tool_ids: Tool IDs to disable (subtractive). Combine with
+                ``enabled_tool_ids=[]`` and an explicit disable list to lock
+                the tool set down.
             session_location: Session metadata location.
             session_source: Session source information.
             tags: Optional session tags.
@@ -313,33 +350,43 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {
-            "machineId": machine_id,
-            "cwd": cwd,
-        }
-        # Add optional params only if set
-        _set_if_not_none(params, "sessionId", session_id)
-        _set_if_not_none(params, "workspaceId", workspace_id)
-        _set_if_not_none(params, "mcpServers", mcp_servers)
-        _set_if_not_none(params, "autonomyMode", _enum_value(autonomy_mode))
-        _set_if_not_none(params, "interactionMode", _enum_value(interaction_mode))
-        _set_if_not_none(params, "autonomyLevel", _enum_value(autonomy_level))
-        _set_if_not_none(params, "modelId", model_id)
-        _set_if_not_none(params, "reasoningEffort", _enum_value(reasoning_effort))
-        _set_if_not_none(params, "specModeModelId", spec_mode_model_id)
-        _set_if_not_none(
-            params,
-            "specModeReasoningEffort",
-            _enum_value(spec_mode_reasoning_effort),
+        validated_session_source = (
+            SessionSource.model_validate(session_source)
+            if session_source is not None
+            else None
         )
-        _set_if_not_none(params, "decompSessionType", _enum_value(decomp_session_type))
-        _set_if_not_none(params, "decompMissionId", decomp_mission_id)
-        _set_if_not_none(params, "skipPermissionsUnsafe", skip_permissions_unsafe)
-        _set_if_not_none(params, "enabledToolIds", enabled_tool_ids)
-        _set_if_not_none(params, "sessionLocation", session_location)
-        _set_if_not_none(params, "sessionSource", session_source)
-        _set_if_not_none(params, "tags", tags)
-        _set_if_not_none(params, "mcpOAuthCallbackUri", mcp_oauth_callback_uri)
+        validated_tags = (
+            [SessionTag.model_validate(tag) for tag in tags]
+            if tags is not None
+            else None
+        )
+        params = _serialize_params(
+            InitializeSessionRequestParams(
+                machine_id=machine_id,
+                cwd=cwd,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                autonomy_mode=autonomy_mode,
+                interaction_mode=interaction_mode,
+                autonomy_level=autonomy_level,
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                spec_mode_model_id=spec_mode_model_id,
+                spec_mode_reasoning_effort=spec_mode_reasoning_effort,
+                decomp_session_type=decomp_session_type,
+                decomp_mission_id=decomp_mission_id,
+                skip_permissions_unsafe=skip_permissions_unsafe,
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+                session_location=session_location,
+                session_source=validated_session_source,
+                tags=validated_tags,
+                mcp_oauth_callback_uri=mcp_oauth_callback_uri,
+            )
+        )
+        # Preserve compatibility with legacy unvalidated MCP dictionaries.
+        if mcp_servers is not None:
+            params["mcpServers"] = mcp_servers
 
         response = await protocol.send_request(
             method=DroidServerMethod.INITIALIZE_SESSION.value,
@@ -380,11 +427,15 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {
-            "sessionId": session_id,
-        }
-        _set_if_not_none(params, "mcpServers", mcp_servers)
-        _set_if_not_none(params, "mcpOAuthCallbackUri", mcp_oauth_callback_uri)
+        params = _serialize_params(
+            LoadSessionRequestParams(
+                session_id=session_id,
+                mcp_oauth_callback_uri=mcp_oauth_callback_uri,
+            )
+        )
+        # Preserve compatibility with legacy unvalidated MCP dictionaries.
+        if mcp_servers is not None:
+            params["mcpServers"] = mcp_servers
 
         response = await protocol.send_request(
             method=DroidServerMethod.LOAD_SESSION.value,
@@ -402,6 +453,7 @@ class DroidClient:
         text: str,
         images: list[Base64ImageSource | dict[str, Any]] | None = None,
         files: list[DocumentSource | dict[str, Any]] | None = None,
+        output_format: OutputFormat | dict[str, Any] | None = None,
         request_id: str | None = None,
     ) -> None:
         """Add a user message to the session.
@@ -412,6 +464,10 @@ class DroidClient:
             text: Message text content.
             images: Optional attached images.
             files: Optional attached documents.
+            output_format: Optional structured-output contract. Either an
+                :class:`~droid_sdk.schemas.client.OutputFormat` or a raw dict
+                of the form ``{"type": "json_schema", "schema": {...}}`` to
+                constrain the reply to a JSON value matching the schema.
             request_id: Optional custom request ID for the JSON-RPC envelope.
 
         Raises:
@@ -423,9 +479,21 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {"text": text}
-        _set_if_not_none(params, "images", images)
-        _set_if_not_none(params, "files", files)
+        validated_output_format = (
+            OutputFormat.model_validate(output_format)
+            if output_format is not None
+            else None
+        )
+        params = _serialize_params(
+            AddUserMessageRequestParams(
+                text=text,
+                output_format=validated_output_format,
+            )
+        )
+        if images is not None:
+            params["images"] = images
+        if files is not None:
+            params["files"] = files
 
         # Use custom request_id by monkey-patching the protocol temporarily,
         # or pass via overridden send_request. The protocol engine generates
@@ -496,6 +564,8 @@ class DroidClient:
         autonomy_level: AutonomyLevel | None = None,
         spec_mode_model_id: str | None = None,
         spec_mode_reasoning_effort: ReasoningEffort | None = None,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
     ) -> None:
         """Update session settings.
 
@@ -510,6 +580,8 @@ class DroidClient:
             autonomy_level: Optional autonomy level.
             spec_mode_model_id: Optional spec mode model ID.
             spec_mode_reasoning_effort: Optional spec mode reasoning effort.
+            enabled_tool_ids: Additional tool IDs to enable beyond defaults.
+            disabled_tool_ids: Tool IDs to disable (subtractive).
 
         Raises:
             SessionError: If no active session.
@@ -520,17 +592,18 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        params: dict[str, Any] = {}
-        _set_if_not_none(params, "modelId", model_id)
-        _set_if_not_none(params, "reasoningEffort", _enum_value(reasoning_effort))
-        _set_if_not_none(params, "autonomyMode", _enum_value(autonomy_mode))
-        _set_if_not_none(params, "interactionMode", _enum_value(interaction_mode))
-        _set_if_not_none(params, "autonomyLevel", _enum_value(autonomy_level))
-        _set_if_not_none(params, "specModeModelId", spec_mode_model_id)
-        _set_if_not_none(
-            params,
-            "specModeReasoningEffort",
-            _enum_value(spec_mode_reasoning_effort),
+        params = _serialize_params(
+            UpdateSessionSettingsRequestParams(
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                autonomy_mode=autonomy_mode,
+                interaction_mode=interaction_mode,
+                autonomy_level=autonomy_level,
+                spec_mode_model_id=spec_mode_model_id,
+                spec_mode_reasoning_effort=spec_mode_reasoning_effort,
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+            )
         )
 
         await protocol.send_request(
@@ -1005,6 +1078,376 @@ class DroidClient:
         return SubmitBugReportResult.model_validate(response.get("result", {}))
 
     # ----------------------------------------------------------
+    # Tool / command discovery
+    # ----------------------------------------------------------
+
+    async def list_tools(
+        self,
+        *,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
+    ) -> ListToolsResult:
+        """List native CLI tools with their allow-state.
+
+        Sends ``droid.list_tools``. This can be called before session
+        initialization, allowing callers to discover tool IDs for initial
+        allow/deny settings. The result reports each tool's ``id`` plus
+        ``default_allowed`` and ``currently_allowed``.
+
+        Args:
+            enabled_tool_ids: Optional hypothetical enable list to evaluate
+                ``currently_allowed`` against (does not mutate the session).
+            disabled_tool_ids: Optional hypothetical disable list.
+
+        Returns:
+            Typed ``ListToolsResult`` with a ``tools`` list.
+
+        Raises:
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        protocol = self._ensure_protocol()
+
+        params = _serialize_params(
+            ListToolsRequestParams(
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+            )
+        )
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.LIST_TOOLS.value,
+            params=params,
+        )
+
+        return ListToolsResult.model_validate(response.get("result", {}))
+
+    async def list_commands(self) -> ListCommandsResult:
+        """List custom slash commands.
+
+        Sends ``droid.list_commands``. Requires an active session.
+
+        Returns:
+            Typed ``ListCommandsResult`` with a ``commands`` list.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.LIST_COMMANDS.value,
+            params={},
+        )
+
+        return ListCommandsResult.model_validate(response.get("result", {}))
+
+    # ----------------------------------------------------------
+    # Session lifecycle: close / compact / fork / rename
+    # ----------------------------------------------------------
+
+    async def close_session(
+        self,
+        *,
+        reason: Literal["clear", "logout", "prompt_input_exit", "other"] | None = None,
+    ) -> CloseSessionResult:
+        """Close the active session.
+
+        Sends ``droid.close_session``. Requires an active session.
+
+        Args:
+            reason: Optional close reason (``"clear"``, ``"logout"``,
+                ``"prompt_input_exit"`` or ``"other"``).
+
+        Returns:
+            Typed ``CloseSessionResult`` (empty payload).
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params = _serialize_params(CloseSessionRequestParams(reason=reason))
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.CLOSE_SESSION.value,
+            params=params,
+        )
+
+        result = CloseSessionResult.model_validate(response.get("result", {}))
+        self._session_id = None
+        return result
+
+    async def compact_session(
+        self,
+        *,
+        custom_instructions: str | None = None,
+    ) -> CompactSessionResult:
+        """Compact the conversation to reclaim context.
+
+        Sends ``droid.compact_session`` with an extended timeout, since
+        compaction runs an LLM summarization pass. Requires an active
+        session.
+
+        Args:
+            custom_instructions: Optional instructions to steer the
+                compaction summary.
+
+        Returns:
+            Typed ``CompactSessionResult`` with ``new_session_id`` and
+            ``removed_count``.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params = _serialize_params(
+            CompactSessionRequestParams(custom_instructions=custom_instructions)
+        )
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.COMPACT_SESSION.value,
+            params=params,
+            timeout=COMPACTION_TIMEOUT,
+        )
+
+        return CompactSessionResult.model_validate(response.get("result", {}))
+
+    async def fork_session(
+        self,
+        *,
+        title: str | None = None,
+        tags: list[SessionTag | dict[str, Any]] | None = None,
+    ) -> ForkSessionResult:
+        """Fork the active session into a new one.
+
+        Sends ``droid.fork_session``. Requires an active session.
+
+        Args:
+            title: Optional title for the fork.
+            tags: Optional session tags for the fork.
+
+        Returns:
+            Typed ``ForkSessionResult`` with ``new_session_id``.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        validated_tags = (
+            [SessionTag.model_validate(tag) for tag in tags]
+            if tags is not None
+            else None
+        )
+        params = _serialize_params(
+            ForkSessionRequestParams(title=title, tags=validated_tags)
+        )
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.FORK_SESSION.value,
+            params=params,
+        )
+
+        return ForkSessionResult.model_validate(response.get("result", {}))
+
+    async def rename_session(self, *, title: str) -> RenameSessionResult:
+        """Rename the active session.
+
+        Sends ``droid.rename_session``. Requires an active session.
+
+        Args:
+            title: New session title.
+
+        Returns:
+            Typed ``RenameSessionResult`` with a ``success`` flag.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params = _serialize_params(RenameSessionRequestParams(title=title))
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.RENAME_SESSION.value,
+            params=params,
+        )
+
+        return RenameSessionResult.model_validate(response.get("result", {}))
+
+    # ----------------------------------------------------------
+    # Context introspection
+    # ----------------------------------------------------------
+
+    async def get_context_stats(self) -> GetContextStatsResult:
+        """Get context-window usage statistics.
+
+        Sends ``droid.get_context_stats``. Requires an active session.
+
+        Returns:
+            Typed ``GetContextStatsResult`` with used/remaining/limit tokens.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.GET_CONTEXT_STATS.value,
+            params={},
+        )
+
+        return GetContextStatsResult.model_validate(response.get("result", {}))
+
+    async def get_context_breakdown(self) -> GetContextBreakdownResult:
+        """Get a detailed breakdown of context-window usage.
+
+        Sends ``droid.get_context_breakdown``. Requires an active session.
+
+        Returns:
+            Typed ``GetContextBreakdownResult`` with per-category, per-skill,
+            per-MCP-server and per-droid token usage.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.GET_CONTEXT_BREAKDOWN.value,
+            params={},
+        )
+
+        return GetContextBreakdownResult.model_validate(response.get("result", {}))
+
+    # ----------------------------------------------------------
+    # Rewind
+    # ----------------------------------------------------------
+
+    async def get_rewind_info(self, *, message_id: str) -> GetRewindInfoResult:
+        """Get file-restore information for rewinding to a message.
+
+        Sends ``droid.get_rewind_info``. Requires an active session.
+
+        Args:
+            message_id: The message to rewind to.
+
+        Returns:
+            Typed ``GetRewindInfoResult`` with restorable, created and
+            evicted file lists.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        session_id = self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params = _serialize_params(
+            GetRewindInfoRequestParams(
+                session_id=session_id,
+                message_id=message_id,
+            )
+        )
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.GET_REWIND_INFO.value,
+            params=params,
+        )
+
+        return GetRewindInfoResult.model_validate(response.get("result", {}))
+
+    async def execute_rewind(
+        self,
+        *,
+        message_id: str,
+        files_to_restore: list[RewindFileSnapshot | dict[str, Any]],
+        files_to_delete: list[RewindFileCreation | dict[str, Any]],
+        fork_title: str,
+    ) -> ExecuteRewindResult:
+        """Execute a rewind, forking the session at ``message_id``.
+
+        Sends ``droid.execute_rewind`` with an extended timeout. Requires
+        an active session.
+
+        Args:
+            message_id: The message to rewind to.
+            files_to_restore: File snapshots to restore, each
+                ``{"filePath", "contentHash", "size"}``.
+            files_to_delete: Files to delete, each ``{"filePath"}``.
+            fork_title: Title for the new forked session.
+
+        Returns:
+            Typed ``ExecuteRewindResult`` with ``new_session_id`` and
+            restore/delete counts.
+
+        Raises:
+            SessionError: If no active session.
+            ProtocolError: If the server returns an error.
+            ConnectionError: If the client has been closed.
+        """
+        self._ensure_not_closed()
+        session_id = self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        validated_files_to_restore = [
+            RewindFileSnapshot.model_validate(file) for file in files_to_restore
+        ]
+        validated_files_to_delete = [
+            RewindFileCreation.model_validate(file) for file in files_to_delete
+        ]
+        params = _serialize_params(
+            ExecuteRewindRequestParams(
+                session_id=session_id,
+                message_id=message_id,
+                files_to_restore=validated_files_to_restore,
+                files_to_delete=validated_files_to_delete,
+                fork_title=fork_title,
+            )
+        )
+
+        response = await protocol.send_request(
+            method=DroidServerMethod.EXECUTE_REWIND.value,
+            params=params,
+            timeout=SESSION_INIT_TIMEOUT,
+        )
+
+        return ExecuteRewindResult.model_validate(response.get("result", {}))
+
+    # ----------------------------------------------------------
     # Streaming: receive_response() async iterator
     # ----------------------------------------------------------
 
@@ -1042,6 +1485,9 @@ class DroidClient:
         queue: asyncio.Queue[StreamMessage | None] = asyncio.Queue()
         was_not_idle = False
         last_token_usage: TokenUsageUpdate | None = None
+        # Correlate tool_use_id -> tool_name so tool_result / tool_progress
+        # notifications (which omit the name) can be backfilled.
+        tool_names: dict[str, str] = {}
 
         def _on_notification(notification_dict: dict[str, Any]) -> None:
             nonlocal was_not_idle, last_token_usage
@@ -1065,8 +1511,20 @@ class DroidClient:
             # Handle list of ToolUse (from CREATE_MESSAGE)
             if isinstance(result, list):
                 for item in result:
+                    tool_names[item.tool_use_id] = item.tool_name
                     queue.put_nowait(item)
                 return
+
+            # Backfill the tool name on results/progress from the matching
+            # tool_use, correlating via tool_use_id.
+            if isinstance(result, (ToolResult, ToolProgress)):
+                should_backfill_tool_name = (
+                    isinstance(result, ToolResult) and result.tool_name is None
+                ) or (isinstance(result, ToolProgress) and not result.tool_name)
+                if should_backfill_tool_name and result.tool_use_id is not None:
+                    name = tool_names.get(result.tool_use_id)
+                    if name is not None:
+                        result = dataclasses.replace(result, tool_name=name)
 
             # Track token usage for TurnComplete
             if isinstance(result, TokenUsageUpdate):
@@ -1248,12 +1706,13 @@ class DroidClient:
                 "or call connect() to reconnect."
             )
 
-    def _ensure_session(self) -> None:
-        """Raise SessionError if no active session."""
+    def _ensure_session(self) -> str:
+        """Return the active session ID, or raise SessionError if absent."""
         if self._session_id is None:
             raise SessionError(
                 "No active session. Call initialize_session or load_session first."
             )
+        return self._session_id
 
     def _ensure_protocol(self) -> ProtocolEngine:
         """Return the protocol engine, raising if not connected."""
@@ -1266,6 +1725,15 @@ def _set_if_not_none(d: dict[str, Any], key: str, value: Any) -> None:
     """Set a key in the dict only if value is not None."""
     if value is not None:
         d[key] = value
+
+
+def _serialize_params(model: BaseModel) -> dict[str, Any]:
+    """Serialize validated request parameters to their wire aliases."""
+    return model.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
 
 
 def _enum_value(val: Any) -> Any:
