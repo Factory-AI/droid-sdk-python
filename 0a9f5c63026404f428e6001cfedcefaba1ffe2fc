@@ -1,0 +1,23 @@
+examples/resume_session.py
+  44ed7c9fd35b7f14 28-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "0a9f5c63026404f428e6001cfedcefaba1ffe2fc",
+  "prompts": {
+    "44ed7c9fd35b7f14": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "7d940fa4-5c04-4880-9b67-1c1a59586234",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 1,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    }
+  }
+}
