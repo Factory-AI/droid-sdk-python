@@ -1,0 +1,23 @@
+README.md
+  44ed7c9fd35b7f14 157,165-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "a1a60259e9dacb317b04e0005bee52c820c579a0",
+  "prompts": {
+    "44ed7c9fd35b7f14": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "7d940fa4-5c04-4880-9b67-1c1a59586234",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 12,
+      "total_deletions": 5,
+      "accepted_lines": 12,
+      "overriden_lines": 0
+    }
+  }
+}
