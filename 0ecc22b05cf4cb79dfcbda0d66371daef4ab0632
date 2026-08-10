@@ -1,0 +1,43 @@
+examples/_helpers.py
+  44ed7c9fd35b7f14 1-83
+examples/query.py
+  c9aef22f2174fd8a 1-33
+examples/interactive_session.py
+  44ed7c9fd35b7f14 2,5,12-14,16,18,21-26,29-59,61,64-65,67,69,71-77,80-84,89-90
+README.md
+  44ed7c9fd35b7f14 3-4,6-20,23,25,31,37-45,47,52-69,74-75,77,79,81,85-87,90-111,113-115,117-121,126-127,129-132,135-155,157,159,161-167,169-170,173-180,182-188,191,193-194,197-199,201-204,207,209-215,217-218,220-221,223-229,232-273,275-279,281-284,286-287,291-294,298,300,303,307,309,311,313-317,319-320,322,324-331,333,335-337,340-357,360-366,370,375-377,383-394,396-407,410-414,416-417,419,421-435,437-521,528-531,533-535,542
+  c9aef22f2174fd8a 280,285,288-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "0ecc22b05cf4cb79dfcbda0d66371daef4ab0632",
+  "prompts": {
+    "44ed7c9fd35b7f14": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "7d940fa4-5c04-4880-9b67-1c1a59586234",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 756,
+      "total_deletions": 854,
+      "accepted_lines": 710,
+      "overriden_lines": 0
+    },
+    "c9aef22f2174fd8a": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f66cd28b-0645-47ac-980e-334b11662d7c",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 38,
+      "total_deletions": 1,
+      "accepted_lines": 38,
+      "overriden_lines": 0
+    }
+  }
+}
