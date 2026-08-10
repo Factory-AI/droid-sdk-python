@@ -1,0 +1,23 @@
+examples/permission_handler.py
+  44ed7c9fd35b7f14 33,35-39,42,50-52,56-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "c9e8eeefaa70e9c6b2ed48370380a4740b8b1726",
+  "prompts": {
+    "44ed7c9fd35b7f14": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "7d940fa4-5c04-4880-9b67-1c1a59586234",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 3,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    }
+  }
+}
