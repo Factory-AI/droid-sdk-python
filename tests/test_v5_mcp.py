@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
+import sys
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -48,6 +50,24 @@ def aliased() -> AliasedOutput:
         result_value=7,
         generated_at=datetime(2025, 1, 2, 3, 4, tzinfo=timezone.utc),
     )
+
+
+def test_mcp_module_requires_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(sys.modules, "droid_sdk.mcp", raising=False)
+    monkeypatch.setitem(sys.modules, "uvicorn", None)
+    with pytest.raises(ImportError, match=r"droid-sdk\[mcp\]"):
+        importlib.import_module("droid_sdk.mcp")
+
+
+def test_package_root_imports_without_mcp_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("uvicorn", "starlette", "mcp"):
+        monkeypatch.setitem(sys.modules, name, None)
+    for name in [key for key in sys.modules if key.split(".")[0] == "droid_sdk"]:
+        monkeypatch.delitem(sys.modules, name)
+    module = importlib.import_module("droid_sdk")
+    assert module.StdioMcpServerConfig is not None
 
 
 @pytest.mark.asyncio

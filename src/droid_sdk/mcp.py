@@ -14,15 +14,23 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import Any, ParamSpec, cast, get_type_hints, overload
 
-import uvicorn
-from mcp import types as mcp_types
-from mcp.server.lowlevel import Server as McpServer
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+try:
+    import uvicorn
+    from mcp import types as mcp_types
+    from mcp.server.lowlevel import Server as McpServer
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse, Response
+    from starlette.routing import Route
+    from starlette.types import Receive, Scope, Send
+except ImportError as _missing_extra:
+    raise ImportError(
+        "In-process MCP servers require the 'mcp' extra: "
+        'pip install "droid-sdk[mcp]". External MCP server configs are '
+        "importable from the droid_sdk package root without it."
+    ) from _missing_extra
+
 from pydantic import ConfigDict, TypeAdapter, create_model
-from starlette.applications import Starlette
-from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
-from starlette.types import Receive, Scope, Send
 
 from droid_sdk._high_level._immutable import FrozenJsonValue, thaw_json
 from droid_sdk._high_level.extensions import (

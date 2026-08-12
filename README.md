@@ -129,9 +129,11 @@ a no-op.
 
 ## MCP and custom runtime
 
-External stdio, HTTP, and SSE configs live in `droid_sdk.mcp`. Annotated
-Python functions can be exposed through an authenticated loopback-only
-Streamable HTTP server:
+External stdio, HTTP, and SSE configs are importable from the package root.
+Annotated Python functions can be exposed through an authenticated
+loopback-only Streamable HTTP server; this in-process server support lives in
+`droid_sdk.mcp` and requires the `mcp` extra
+(`pip install "droid-sdk[mcp]"`):
 
 ```python
 from droid_sdk import SessionConfig

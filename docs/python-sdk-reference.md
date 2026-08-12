@@ -26,6 +26,12 @@ interruption, compaction, or rewind. `Session` does not have a `run()` method.
 pip install droid-sdk
 ```
 
+In-process MCP tool servers (`droid_sdk.mcp`) need the `mcp` extra:
+
+```bash
+pip install "droid-sdk[mcp]"
+```
+
 Requirements:
 
 - Python 3.10 or later
@@ -1259,7 +1265,9 @@ Skills may come from project, personal, built-in, or automation settings.
 
 ### In-process MCP tools
 
-Use `@tool` to expose an annotated Python function:
+In-process servers require the `mcp` extra
+(`pip install "droid-sdk[mcp]"`). Use `@tool` to expose an annotated Python
+function:
 
 ```python
 from droid_sdk.mcp import create_sdk_mcp_server, tool
@@ -1309,8 +1317,10 @@ the server. Sessions normally own these calls.
 
 ### External MCP servers
 
+External server configs do not need the `mcp` extra:
+
 ```python
-from droid_sdk.mcp import HttpMcpServerConfig, StdioMcpServerConfig
+from droid_sdk import HttpMcpServerConfig, StdioMcpServerConfig
 
 config = SessionConfig(
     mcp_servers=[

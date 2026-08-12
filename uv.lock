@@ -371,38 +371,51 @@ name = "droid-sdk"
 version = "0.1.3"
 source = { editable = "." }
 dependencies = [
-    { name = "mcp" },
     { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+
+[package.optional-dependencies]
+mcp = [
+    { name = "mcp" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "mcp" },
     { name = "mypy" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "mcp", specifier = ">=1.27,<2" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.27,<2" },
     { name = "pydantic", specifier = ">=2.0" },
-    { name = "starlette", specifier = ">=0.40" },
-    { name = "uvicorn", specifier = ">=0.31,<1" },
+    { name = "starlette", marker = "extra == 'mcp'", specifier = ">=0.40" },
+    { name = "typing-extensions", specifier = ">=4.4" },
+    { name = "uvicorn", marker = "extra == 'mcp'", specifier = ">=0.31,<1" },
 ]
+provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "mcp", specifier = ">=1.27,<2" },
     { name = "mypy" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "starlette", specifier = ">=0.40" },
+    { name = "uvicorn", specifier = ">=0.31,<1" },
 ]
 
 [[package]]
