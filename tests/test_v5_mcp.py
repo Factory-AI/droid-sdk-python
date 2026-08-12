@@ -205,10 +205,10 @@ async def test_sdk_mcp_concurrent_start_and_cancellation_share_runtime(
     try:
         assert calls == 1
         assert server.config is config
-        runtime = server._runtime
+        runtime = mcp_module._server_state(server).runtime
         assert runtime is not None
-        assert not runtime.task.done()  # type: ignore[attr-defined]
-        assert runtime.listener.fileno() >= 0  # type: ignore[attr-defined]
+        assert not runtime.task.done()
+        assert runtime.listener.fileno() >= 0
     finally:
         await server.close()
 
@@ -237,9 +237,9 @@ async def test_sdk_mcp_lone_cancelled_start_is_cleaned_and_retryable(
     release.set()
     await server.close()
     assert server.config is None
-    lifecycle = server._lifecycle
-    assert lifecycle is not None
-    assert lifecycle.close_task.done()  # type: ignore[attr-defined]
+    state = mcp_module._server_state(server)
+    assert state.close_task is not None
+    assert state.close_task.done()
 
     restarted = await server.start()
     try:
@@ -254,7 +254,7 @@ async def test_sdk_mcp_cancelled_close_finishes_once_and_restarts(
 ) -> None:
     server = create_sdk_mcp_server("calculator", [add])
     await server.start()
-    runtime = server._runtime
+    runtime = mcp_module._server_state(server).runtime
     assert runtime is not None
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -281,8 +281,8 @@ async def test_sdk_mcp_cancelled_close_finishes_once_and_restarts(
     await second
     assert calls == 1
     assert server.config is None
-    assert runtime.task.done()  # type: ignore[attr-defined]
-    assert runtime.listener.fileno() == -1  # type: ignore[attr-defined]
+    assert runtime.task.done()
+    assert runtime.listener.fileno() == -1
 
     restarted = await server.start()
     try:

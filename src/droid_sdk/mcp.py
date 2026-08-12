@@ -13,6 +13,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequen
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import Any, ParamSpec, cast, get_type_hints, overload
+from weakref import WeakKeyDictionary
 
 try:
     import uvicorn
@@ -44,6 +45,7 @@ from droid_sdk._high_level.extensions import (
     StdioMcpServerConfig,
     ToolResponse,
 )
+from droid_sdk._util import cancel_and_drain, wait_shielded
 
 P = ParamSpec("P")
 
@@ -188,22 +190,26 @@ class _ServerRuntime:
 
 
 @dataclass(slots=True)
-class _ServerLifecycle:
+class _ServerState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    runtime: _ServerRuntime | None = None
     start_task: asyncio.Task[HttpMcpServerConfig] | None = None
     close_task: asyncio.Task[None] | None = None
     start_waiters: int = 0
 
 
-def _server_lifecycle(server: SdkMcpServer) -> _ServerLifecycle:
-    lifecycle = cast(
-        "_ServerLifecycle | None",
-        object.__getattribute__(server, "_lifecycle"),
-    )
-    if lifecycle is None:
-        lifecycle = _ServerLifecycle()
-        object.__setattr__(server, "_lifecycle", lifecycle)
-    return lifecycle
+# Keeps the public SdkMcpServer handle honestly frozen: all mutable
+# runtime state lives here, keyed by server identity, and disappears
+# with the handle.
+_SERVER_STATES: WeakKeyDictionary[SdkMcpServer, _ServerState] = WeakKeyDictionary()
+
+
+def _server_state(server: SdkMcpServer) -> _ServerState:
+    state = _SERVER_STATES.get(server)
+    if state is None:
+        state = _ServerState()
+        _SERVER_STATES[server] = state
+    return state
 
 
 class _BearerEndpoint:
@@ -326,44 +332,45 @@ def _create_mcp_application(server: SdkMcpServer, token: str) -> Starlette:
 
 
 def sdk_server_config(server: SdkMcpServer) -> HttpMcpServerConfig | None:
-    runtime = cast(
-        "_ServerRuntime | None",
-        object.__getattribute__(server, "_runtime"),
-    )
-    return None if runtime is None else runtime.config
+    state = _SERVER_STATES.get(server)
+    return None if state is None or state.runtime is None else state.runtime.config
 
 
 async def start_sdk_server(server: SdkMcpServer) -> HttpMcpServerConfig:
-    lifecycle = _server_lifecycle(server)
-    async with lifecycle.lock:
-        current = cast(
-            "_ServerRuntime | None",
-            object.__getattribute__(server, "_runtime"),
-        )
-        if current is not None and (
-            lifecycle.close_task is None or lifecycle.close_task.done()
+    state = _server_state(server)
+    async with state.lock:
+        if state.runtime is not None and (
+            state.close_task is None or state.close_task.done()
         ):
-            return current.config
-        if lifecycle.start_task is not None and not lifecycle.start_task.done():
-            task = lifecycle.start_task
-        elif lifecycle.close_task is not None and not lifecycle.close_task.done():
-            task = asyncio.create_task(_start_after_close(server, lifecycle.close_task))
-            lifecycle.start_task = task
+            return state.runtime.config
+        if state.start_task is not None and not state.start_task.done():
+            task = state.start_task
+        elif state.close_task is not None and not state.close_task.done():
+            task = asyncio.create_task(_start_after_close(server, state.close_task))
+            state.start_task = task
         else:
             task = asyncio.create_task(_start_sdk_server_impl(server))
-            lifecycle.start_task = task
-        lifecycle.start_waiters += 1
+            state.start_task = task
+        state.start_waiters += 1
+
+    async def abandon(start_task: asyncio.Task[HttpMcpServerConfig]) -> None:
+        # The last cancelled waiter tears down whatever the start produced.
+        state.start_waiters -= 1
+        if state.start_waiters == 0 and state.start_task is start_task:
+            state.start_task = None
+            state.close_task = asyncio.create_task(
+                _close_after_start(server, start_task)
+            )
+
     cancelled = False
     try:
-        return await asyncio.shield(task)
+        return await wait_shielded(task, abandon)
     except asyncio.CancelledError:
         cancelled = True
         raise
     finally:
-        lifecycle.start_waiters -= 1
-        if cancelled and lifecycle.start_waiters == 0 and lifecycle.start_task is task:
-            lifecycle.start_task = None
-            lifecycle.close_task = asyncio.create_task(_close_after_start(server, task))
+        if not cancelled:
+            state.start_waiters -= 1
 
 
 async def _start_after_close(
@@ -414,38 +421,32 @@ async def _start_sdk_server_impl(server: SdkMcpServer) -> HttpMcpServerConfig:
             oauth=False,
         )
         runtime = _ServerRuntime(config, token, uvicorn_server, task, listener)
-        object.__setattr__(server, "_runtime", runtime)
+        _server_state(server).runtime = runtime
         return config
     except BaseException:
         if uvicorn_server is not None:
             uvicorn_server.should_exit = True
         listener.close()
         if task is not None:
-            if not task.done():
-                task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+            await cancel_and_drain(task)
         raise
 
 
 async def close_sdk_server(server: SdkMcpServer) -> None:
-    lifecycle = _server_lifecycle(server)
-    async with lifecycle.lock:
-        if lifecycle.start_task is not None and not lifecycle.start_task.done():
-            task = asyncio.create_task(_close_after_start(server, lifecycle.start_task))
-            lifecycle.start_task = None
-            lifecycle.close_task = task
-        elif lifecycle.close_task is not None and not lifecycle.close_task.done():
-            task = lifecycle.close_task
+    state = _server_state(server)
+    async with state.lock:
+        if state.start_task is not None and not state.start_task.done():
+            task = asyncio.create_task(_close_after_start(server, state.start_task))
+            state.start_task = None
+            state.close_task = task
+        elif state.close_task is not None and not state.close_task.done():
+            task = state.close_task
+        elif state.runtime is None:
+            return
         else:
-            runtime = cast(
-                "_ServerRuntime | None",
-                object.__getattribute__(server, "_runtime"),
-            )
-            if runtime is None:
-                return
-            task = asyncio.create_task(_close_sdk_server_impl(server, runtime))
-            lifecycle.close_task = task
-    await asyncio.shield(task)
+            task = asyncio.create_task(_close_sdk_server_impl(server, state.runtime))
+            state.close_task = task
+    await wait_shielded(task)
 
 
 async def _close_after_start(
@@ -456,10 +457,7 @@ async def _close_after_start(
         await start_task
     except BaseException:
         return
-    runtime = cast(
-        "_ServerRuntime | None",
-        object.__getattribute__(server, "_runtime"),
-    )
+    runtime = _server_state(server).runtime
     if runtime is not None:
         await _close_sdk_server_impl(server, runtime)
 
@@ -472,12 +470,12 @@ async def _close_sdk_server_impl(
     try:
         await asyncio.wait_for(runtime.task, timeout=5)
     except asyncio.TimeoutError:
-        runtime.task.cancel()
-        await asyncio.gather(runtime.task, return_exceptions=True)
+        await cancel_and_drain(runtime.task)
     finally:
         runtime.listener.close()
-        if object.__getattribute__(server, "_runtime") is runtime:
-            object.__setattr__(server, "_runtime", None)
+        state = _server_state(server)
+        if state.runtime is runtime:
+            state.runtime = None
 
 
 __all__ = [

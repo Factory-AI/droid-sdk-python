@@ -110,6 +110,10 @@ T = TypeVar("T")
 E = TypeVar("E", bound=object, default=object)
 _RESULT_TYPES = (RunSuccess, RunInterrupted, RunFailure)
 
+# How long RunStream._release waits for the finish callback (typically an
+# interrupt request) before detaching it to complete in the background.
+_FINISH_GRACE_SECONDS = 0.1
+
 
 def _utc_from_timestamp(value: float) -> datetime:
     """Convert the protocol's epoch-millisecond timestamps to aware UTC."""
@@ -944,7 +948,7 @@ class RunStream(Generic[T, E], AsyncIterator[E]):
                     task = finish_task
                     await asyncio.wait_for(
                         asyncio.shield(finish_task),
-                        timeout=0.1,
+                        timeout=_FINISH_GRACE_SECONDS,
                     )
             except asyncio.TimeoutError:
                 if task is not None:

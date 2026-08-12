@@ -187,23 +187,15 @@ class DroidTool:
             )
 
 
-@dataclass(frozen=True, slots=True)
+# No slots and identity equality: droid_sdk.mcp keys its per-server runtime
+# state on weak references to this handle, which needs __weakref__ and an
+# identity hash (the field-based hash would also choke on the unhashable
+# tool schemas).
+@dataclass(frozen=True, eq=False)
 class SdkMcpServer:
     name: str
     version: str
     tools: Sequence[DroidTool]
-    _runtime: object | None = field(
-        default=None,
-        init=False,
-        repr=False,
-        compare=False,
-    )
-    _lifecycle: object | None = field(
-        default=None,
-        init=False,
-        repr=False,
-        compare=False,
-    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tools", tuple(self.tools))
