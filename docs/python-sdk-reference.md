@@ -206,6 +206,8 @@ async with Session(model="auto", config=config) as session:
 ```
 
 The primary model handles Auto turns. `spec_model` handles Spec turns.
+Switch modes on a live session with `enter_spec()` and `leave_spec()`; see
+[Modes](#modes).
 
 ### Model configuration contract
 
@@ -1075,8 +1077,9 @@ QuestionHandler = Callable[
 | Type | Fields |
 | --- | --- |
 | `InteractionHandlers` | `on_permission`, `on_question` |
-| `PermissionRequest` | `actions`, `options`, `associated_session_ids` |
+| `PermissionRequest` | `actions`, `options`, `associated_session_ids`, `plan` |
 | `PermissionOption` | `label`, `value` |
+| `Plan` | `text`, `title` |
 | `PermissionResponse` | `selected_option`, `comment`, `edited_spec_content` |
 | `QuestionRequest` | `tool_call_id`, `questions` |
 | `Question` | `index`, `topic`, `question`, `options`, `multi_select` |
@@ -1356,10 +1359,14 @@ the run stream. `HookExecution.status` is `"started"`, `"completed"`, or
 
 ## Session lifecycle
 
-Fork, compact, and rewind create successor sessions. They return an opened
-`Session` that owns the existing Droid connection.
+Fork, compact, and rewind create successor sessions. The successor is an
+opened `Session` that takes over the existing Droid connection; `fork()`
+returns it directly, while `compact()` and `rewind()` return it on their
+outcome objects.
 
 ### Fork
+
+Fork copies the conversation into a new session and continues there.
 
 ```python
 fork = await session.fork(
@@ -1375,6 +1382,9 @@ async with fork:
 
 ### Compact
 
+Compaction summarizes older conversation history to free context-window
+space.
+
 ```python
 outcome = await session.compact(
     instructions="Keep decisions and unresolved failures."
@@ -1385,6 +1395,9 @@ async with outcome.session as compacted:
 ```
 
 ### Rewind
+
+Rewind returns the conversation to an earlier message and can restore or
+delete files changed since.
 
 ```python
 info = await session.rewind_info(message_id)
@@ -1431,7 +1444,7 @@ After a successful replacement:
 - active methods on the source raise `SessionReplacedError`
 - closing the source is a no-op
 
-Do not replace a session while it has an active turn.
+Replacing a session with an active turn raises `SessionBusyError`.
 
 Only one replacement may run at a time. `open()` and another replacement
 raise `SessionBusyError` while replacement is active. `close()` racing a
