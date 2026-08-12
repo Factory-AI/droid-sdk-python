@@ -1,4 +1,9 @@
-# pyright: reportCallIssue=false, reportUnknownMemberType=false, reportUnknownVariableType=false
+# The request-param pydantic models declare camelCase wire aliases with
+# populate_by_name=True. Pyright's dataclass_transform support only sees the
+# aliases, so it rejects the snake_case keywords these constructors accept at
+# runtime; mypy's pydantic plugin validates those same calls. Only
+# call-signature checking is disabled here.
+# pyright: reportCallIssue=false
 
 """DroidClient — high-level async API for the Factory Droid SDK.
 
@@ -15,7 +20,7 @@ import dataclasses
 import logging
 from collections.abc import AsyncIterator, Callable, Sequence
 from types import TracebackType  # noqa: TC003
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -1834,11 +1839,13 @@ class DroidClient:
         """
         # Extract the notification type from the payload
         notif_type: str | None = None
-        params = notification.get("params")
+        params = cast("object", notification.get("params"))
         if isinstance(params, dict):
-            inner = params.get("notification")
+            inner = cast("dict[str, object]", params).get("notification")
             if isinstance(inner, dict):
-                notif_type = inner.get("type")
+                raw_type = cast("dict[str, object]", inner).get("type")
+                if isinstance(raw_type, str):
+                    notif_type = raw_type
 
         for callback, type_filter in list(self._notification_listeners):
             if type_filter is not None and notif_type != type_filter.value:
