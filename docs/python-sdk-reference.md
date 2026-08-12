@@ -1765,6 +1765,7 @@ Run commands from the repository root:
 | Resume | `uv run python examples/resume_session.py --session-id ID` | Live resumed turn |
 | SDK MCP | `uv run python examples/sdk_mcp.py` | Live in-process MCP result |
 | Session operations | `uv run python examples/session_operations.py` | Live settings, discovery, fork, and compact |
+| Stream events | `uv run python examples/stream_events.py` | Live tour of every stream event type |
 | Structured output | `uv run python examples/structured_output_model.py` | Live validated model output |
 
 Live examples require an authenticated local Droid CLI or `FACTORY_API_KEY`;
