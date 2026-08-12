@@ -1,16 +1,10 @@
-# Factory Droid SDK for Python, v5 API
-
-> Implemented public API for the Python SDK v5 line.
-
-The Python SDK follows the concepts and behavior of the Droid TypeScript SDK.
-Python differences are limited to naming, typing, and async resource ownership.
+# Droid SDK for Python
 
 Install the package as `droid-sdk` and import it as `droid_sdk`.
 
 ## Overview
 
-The first release starts a local `droid` subprocess and exposes two ways to
-run a turn:
+The SDK runs a local `droid` subprocess and exposes two ways to run a turn:
 
 | Goal | API |
 | --- | --- |
@@ -18,18 +12,13 @@ run a turn:
 | Run turns in an existing session | `session.stream(...)` |
 
 Use `Session` when prompts need shared history or session operations such as
-interruption, compaction, or rewind. `Session` does not have a `run()` method.
+interruption, compaction, or rewind. There is no `session.run()`; every
+session turn goes through `stream()`.
 
 ## Install and authenticate
 
 ```bash
 pip install droid-sdk
-```
-
-In-process MCP tool servers (`droid_sdk.mcp`) need the `mcp` extra:
-
-```bash
-pip install "droid-sdk[mcp]"
 ```
 
 Requirements:
@@ -64,9 +53,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`run()` creates a persisted session, consumes one default stream, and closes
-the process and resources it owns. The saved session remains resumable.
-See [Result types](#result-types) for every terminal outcome.
+`run()` starts a session, runs one turn, and closes everything it created.
+The saved session remains resumable. See [Result types](#result-types) for
+every terminal outcome.
 
 ### Continue a conversation
 
@@ -137,15 +126,11 @@ A turn begins with `session.stream(prompt)` and ends when the stream yields a
 
 ### Results and exceptions
 
-Droid outcomes are results:
-
-- `RunSuccess`
-- `RunInterrupted`
-- `RunFailure`
-
-Interrupted turns, execution failures, and structured-output failures do not
-raise. Setup, transport, process, protocol, timeout, and cancellation failures
-raise exceptions.
+A turn's outcome is a value, not an exception: `RunSuccess`,
+`RunInterrupted`, or `RunFailure`. Interrupted turns, execution failures, and
+structured-output failures do not raise. Failures in the machinery around a
+turn (setup, transport, process, protocol, timeout, and cancellation) raise
+exceptions.
 
 ### Ownership
 
@@ -159,9 +144,9 @@ raise exceptions.
 
 ### Typing
 
-The package includes `py.typed`. Public unions narrow with `isinstance()`.
-High-level value models are immutable dataclasses. `TraceContext` is a mutable
-carrier so tracing providers can inject values.
+The package includes `py.typed`, and the public API type-checks under strict
+Pyright and mypy. Public unions narrow with `isinstance()`. High-level value
+models are immutable dataclasses.
 
 | Call | Static return type |
 | --- | --- |
@@ -171,9 +156,6 @@ carrier so tracing providers can inject values.
 | `session.stream(...)` | `RunStream[T, StreamMessage[T]]` |
 | Partial `session.stream(...)` | `RunStream[T, StreamEvent[T]]` |
 | `stream.result` | `RunResult[T]` |
-
-Pydantic provides typed structured-output adapters. JSON-RPC boundaries use
-the protocol models. Strict Pyright, mypy, and type tests are release gates.
 
 ## Models
 
@@ -1542,7 +1524,8 @@ contents, raw process output, stack traces, and credentials.
 
 `attributes` is `Mapping[str, str | int | float | bool | None]`. Log levels are
 `"debug"`, `"info"`, `"warn"`, and `"error"`. Metric kinds are `"counter"`
-and `"histogram"`.
+and `"histogram"`. `TraceContext` is deliberately mutable so tracing providers
+can inject values into it.
 
 ### Custom runtime
 
