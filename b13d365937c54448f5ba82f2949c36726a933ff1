@@ -1,0 +1,23 @@
+src/droid_sdk/_high_level/session.py
+  3b6dee923a82df82 1456,1458-1478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "b13d365937c54448f5ba82f2949c36726a933ff1",
+  "prompts": {
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 22,
+      "total_deletions": 13,
+      "accepted_lines": 22,
+      "overriden_lines": 0
+    }
+  }
+}
