@@ -1296,20 +1296,9 @@ async def test_throwing_error_sink_cannot_block_question_cancellation(
 
 
 @pytest.mark.asyncio
-async def test_clearing_high_level_handlers_cannot_reactivate_legacy_approval() -> None:
+async def test_dispatcher_registers_through_low_level_handler_slots() -> None:
     client = DroidClient(exec_path="/not-used")
-    legacy_calls = 0
-
-    def approve_legacy(params: dict[str, object]) -> str:
-        nonlocal legacy_calls
-        legacy_calls += 1
-        return "proceed_once"
-
-    client.set_permission_handler(approve_legacy)
-    client.set_ask_user_handler(
-        lambda params: {"cancelled": False, "answers": ["legacy"]}
-    )
-    client.set_interaction_handlers(
+    dispatcher = InteractionDispatcher(
         InteractionHandlers(
             on_permission=lambda request: request.respond(
                 ToolConfirmationOutcome.PROCEED_ONCE
@@ -1317,11 +1306,21 @@ async def test_clearing_high_level_handlers_cannot_reactivate_legacy_approval() 
             on_question=lambda request: request.cancel(),
         )
     )
-    client.clear_interaction_handlers()
+    client.set_permission_handler(dispatcher.handle_permission)
+    client.set_ask_user_handler(dispatcher.handle_question)
 
+    assert await client._dispatch_permission_request(_permission_params()) == {
+        "selectedOption": "proceed_once"
+    }
+    assert await client._dispatch_ask_user_request(_question_params()) == {
+        "cancelled": True,
+        "answers": [],
+    }
+
+    client.clear_permission_handler()
+    client.clear_ask_user_handler()
     assert client._dispatch_permission_request({}) == "cancel"
     assert client._dispatch_ask_user_request({}) == {
         "cancelled": True,
         "answers": [],
     }
-    assert legacy_calls == 0

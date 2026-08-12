@@ -30,7 +30,6 @@ from droid_sdk import (
     SessionReplacementError,
     TextDocumentSource,
 )
-from droid_sdk._high_level.interaction_adapter import InteractionDispatcher
 from droid_sdk.mcp import create_sdk_mcp_server
 from droid_sdk.observability import LogEvent, MetricEvent, Observability
 from droid_sdk.schemas.enums import (
@@ -93,7 +92,8 @@ class FakeClient:
         self.mcp_calls: list[dict[str, Any]] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
         self.error_callbacks: list[Callable[[Exception], None]] = []
-        self.dispatcher: InteractionDispatcher | None = None
+        self.permission_handler: Callable[..., Any] | None = None
+        self.ask_user_handler: Callable[..., Any] | None = None
         self.interrupt_calls = 0
         self.close_calls = 0
         self.close_session_calls = 0
@@ -122,16 +122,11 @@ class FakeClient:
     async def update_session_settings(self, **kwargs: Any) -> None:
         self.update_calls.append(kwargs)
 
-    def set_interaction_handlers(
-        self,
-        handlers: object,
-        *,
-        error_sink: object | None = None,
-    ) -> None:
-        self.dispatcher = InteractionDispatcher(
-            cast("InteractionHandlers", handlers),
-            error_sink=cast("Any", error_sink),
-        )
+    def set_permission_handler(self, handler: Callable[..., Any]) -> None:
+        self.permission_handler = handler
+
+    def set_ask_user_handler(self, handler: Callable[..., Any]) -> None:
+        self.ask_user_handler = handler
 
     def on_error(
         self,
@@ -995,11 +990,9 @@ async def test_interaction_failures_are_sanitized_stream_events() -> None:
     await session.open()
     stream = session.stream("interact")
     await stream.__aenter__()
-    dispatcher = FakeClient.instances[0].dispatcher
-    assert dispatcher is not None
-    assert await dispatcher.handle_permission(permission_params()) == {
-        "selectedOption": "cancel"
-    }
+    handle_permission = FakeClient.instances[0].permission_handler
+    assert handle_permission is not None
+    assert await handle_permission(permission_params()) == {"selectedOption": "cancel"}
 
     event = await anext(stream.__aiter__())
     assert isinstance(event, ErrorEvent)

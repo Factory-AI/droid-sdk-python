@@ -17,7 +17,6 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from types import TracebackType  # noqa: TC003
 from typing import TYPE_CHECKING, Any, Literal
 
-from droid_sdk._high_level.interaction_adapter import InteractionDispatcher
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -112,9 +111,6 @@ from droid_sdk.types import DroidClientTransport  # noqa: TC001
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from droid_sdk._high_level.interactions import InteractionHandlers
-    from droid_sdk._high_level.messages import ErrorEvent as HighLevelErrorEvent
-
 logger = logging.getLogger(__name__)
 
 # Type alias for notification listener callbacks
@@ -195,7 +191,6 @@ class DroidClient:
         # Client-level server→client request handlers
         self._permission_handler: Callable[..., Any] | None = None
         self._ask_user_handler: Callable[..., Any] | None = None
-        self._interaction_dispatcher: InteractionDispatcher | None = None
 
     # ----------------------------------------------------------
     # Properties
@@ -281,7 +276,6 @@ class DroidClient:
         self._error_listeners.clear()
         self._permission_handler = None
         self._ask_user_handler = None
-        self._interaction_dispatcher = None
 
         if self._protocol is not None:
             await self._protocol.close()
@@ -1778,49 +1772,18 @@ class DroidClient:
     # Server→client request handlers
     # ----------------------------------------------------------
 
-    def set_interaction_handlers(
-        self,
-        handlers: InteractionHandlers,
-        *,
-        error_sink: Callable[[HighLevelErrorEvent], None] | None = None,
-    ) -> None:
-        """Register immutable high-level interaction handlers.
-
-        Handler failures return the protocol cancellation response and are
-        reported to ``error_sink`` as content-free :class:`ErrorEvent` values.
-        """
-        dispatcher = InteractionDispatcher(
-            handlers,
-            error_sink=error_sink,
-        )
-        self._permission_handler = None
-        self._ask_user_handler = None
-        self._interaction_dispatcher = dispatcher
-        if self._protocol is not None:
-            self._protocol.set_permission_handler(self._dispatch_permission_request)
-            self._protocol.set_ask_user_handler(self._dispatch_ask_user_request)
-
-    def clear_interaction_handlers(self) -> None:
-        """Clear high-level handlers and restore protocol cancellation defaults."""
-        self._permission_handler = None
-        self._ask_user_handler = None
-        self._interaction_dispatcher = None
-        if self._protocol is not None:
-            self._protocol.set_permission_handler(self._dispatch_permission_request)
-            self._protocol.set_ask_user_handler(self._dispatch_ask_user_request)
-
     def set_permission_handler(self, handler: Callable[..., Any]) -> None:
         """Register a handler for server→client permission requests.
 
         The handler receives the request params dict and should return
-        a ``ToolConfirmationOutcome`` string value (or any string).
+        a ``ToolConfirmationOutcome`` string value or a complete response
+        dict (``{"selectedOption": ...}``).
         Async handlers are awaited. Replaces any previously registered
         handler.
 
         Args:
-            handler: Sync or async callable ``(params) -> str``.
+            handler: Sync or async callable ``(params) -> str | dict``.
         """
-        self._interaction_dispatcher = None
         self._permission_handler = handler
         # Update protocol engine if already connected
         if self._protocol is not None:
@@ -1846,7 +1809,6 @@ class DroidClient:
         Args:
             handler: Sync or async callable ``(params) -> dict``.
         """
-        self._interaction_dispatcher = None
         self._ask_user_handler = handler
         if self._protocol is not None:
             self._protocol.set_ask_user_handler(self._dispatch_ask_user_request)
@@ -1901,8 +1863,6 @@ class DroidClient:
 
         If no handler is set, returns the default Cancel outcome.
         """
-        if self._interaction_dispatcher is not None:
-            return self._interaction_dispatcher.handle_permission(params)
         handler = self._permission_handler
         if handler is None:
             return "cancel"
@@ -1913,8 +1873,6 @@ class DroidClient:
 
         If no handler is set, returns the default cancelled response.
         """
-        if self._interaction_dispatcher is not None:
-            return self._interaction_dispatcher.handle_question(params)
         handler = self._ask_user_handler
         if handler is None:
             return {"cancelled": True, "answers": []}

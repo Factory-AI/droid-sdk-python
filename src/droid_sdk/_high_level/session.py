@@ -67,6 +67,7 @@ from droid_sdk._high_level.extensions import (
     StdioMcpServerConfig,
     ToolInfo,
 )
+from droid_sdk._high_level.interaction_adapter import InteractionDispatcher
 from droid_sdk._high_level.interactions import InteractionHandlers
 from droid_sdk._high_level.messages import (
     ContextUsage,
@@ -274,6 +275,7 @@ class Session:
         self._reasoning_effort = reasoning_effort
         self._config = config or SessionConfig()
         self._interactions = interactions or InteractionHandlers()
+        self._dispatcher = InteractionDispatcher(self._interactions)
         self._runtime_config = runtime or Runtime()
         self._observability = ObservabilityAdapter(self._runtime_config.observability)
         self._api_key = api_key
@@ -528,7 +530,8 @@ class Session:
                     ),
                     cwd=str(requested_cwd),
                 ) from exc
-            client.set_interaction_handlers(self._interactions)
+            client.set_permission_handler(self._dispatcher.handle_permission)
+            client.set_ask_user_handler(self._dispatcher.handle_question)
 
             if self._resume_id is not None:
                 session_start_attempted = True
@@ -886,10 +889,7 @@ class Session:
         async def start(stream: RunStream[Any, Any]) -> None:
             nonlocal stream_unsubscribes
             client = self._require_client()
-            client.set_interaction_handlers(
-                self._interactions,
-                error_sink=stream.queue_error_event,
-            )
+            self._dispatcher.error_sink = stream.queue_error_event
             unsubscribe = client.on_notification(stream.feed_notification)
             unsubscribe_error = client.on_error(stream.feed_error)
             self._subscriptions.update((unsubscribe, unsubscribe_error))
@@ -931,8 +931,7 @@ class Session:
                 self._active_stream = None
                 if self._state is _State.BUSY:
                     self._state = _State.OPEN
-            if client is not None:
-                client.set_interaction_handlers(self._interactions)
+            self._dispatcher.error_sink = None
             if interrupt and client is not None:
                 task = asyncio.create_task(client.interrupt_session())
                 task.add_done_callback(_consume_task_result)
