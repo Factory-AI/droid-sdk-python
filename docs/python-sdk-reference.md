@@ -338,9 +338,8 @@ await session.update_settings(
 )
 ```
 
-Only supplied fields change. The method also accepts interaction mode,
-mode-specific model settings, tags, compaction settings, and all native-tool
-override fields. Set nullable Spec-model fields to `None` to clear them.
+Only supplied fields change. Set nullable Spec-model fields to `None` to
+clear them.
 
 `update_settings()` accepts:
 
@@ -452,33 +451,14 @@ first. Timestamps are timezone-aware.
 
 | Type | Fields |
 | --- | --- |
-| `SessionSettings` | `model`, `reasoning_effort`, `mode`, `autonomy` |
-| `SessionSettings` | `spec_model`, `spec_reasoning_effort`, `tags`, `sandbox` |
-| `SessionSettings` | `additional_tools`, `enabled_tools`, `disabled_tools` |
-| `SessionSettings` | `restrict_tools` |
-| `SessionSettingsUpdate` | `model`, `reasoning_effort`, `mode`, `autonomy` |
-| `SessionSettingsUpdate` | `spec_model`, `spec_reasoning_effort`, `tags` |
-| `SessionSettingsUpdate` | `additional_tools`, `enabled_tools`, `disabled_tools` |
-| `SessionSettingsUpdate` | `restrict_tools`, `compaction_threshold_check_enabled` |
+| `SessionSettings` | `model`, `reasoning_effort`, `mode`, `autonomy`, `spec_model`, `spec_reasoning_effort`, `tags`, `sandbox`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools` |
+| `SessionSettingsUpdate` | `model`, `reasoning_effort`, `mode`, `autonomy`, `spec_model`, `spec_reasoning_effort`, `tags`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools`, `compaction_threshold_check_enabled` |
 | `SandboxSettings` | `enabled: bool`, `mode: str \| None = None` |
 | `SessionTag` | `name`, `metadata` |
-| `SavedSession` | `id`, `title`, `owner`, `message_count` |
-| `SavedSession` | `modified_at`, `created_at`, `cwd`, `is_favorite` |
+| `SavedSession` | `id`, `title`, `owner`, `message_count`, `modified_at`, `created_at`, `cwd`, `is_favorite` |
 
-Every `SessionSettingsUpdate` field defaults to `None`:
-
-| Field | Type |
-| --- | --- |
-| `model` | `str \| None` |
-| `reasoning_effort` | `ReasoningEffort \| None` |
-| `mode` | `Mode \| None` |
-| `autonomy` | `Autonomy \| None` |
-| `spec_model` | `str \| None` |
-| `spec_reasoning_effort` | `ReasoningEffort \| None` |
-| `tags` | `Sequence[SessionTag] \| None` |
-| `additional_tools`, `enabled_tools` | `set[str] \| frozenset[str] \| None` |
-| `disabled_tools`, `restrict_tools` | `set[str] \| frozenset[str] \| None` |
-| `compaction_threshold_check_enabled` | `bool \| None` |
+Every `SessionSettingsUpdate` field defaults to `None`. Its field types
+match the `update_settings()` table above.
 
 `list_sessions()` returns `list[SavedSession]`. Its filters are `cwd`,
 `all_workspaces`, and `limit`.
@@ -554,9 +534,7 @@ StreamMessage[T] = (
 | `AssistantMessage` | Conversation-message fields |
 | `ToolCall` | `name`, `tool_use_id`, `input` |
 | `ToolResult` | `tool_use_id`, `tool_name`, `content`, `is_error` |
-| `HookExecution` | `hook_id`, `event_name`, `matcher`, `tool_call_id` |
-| `HookExecution` | `command`, `timeout`, `status`, `exit_code` |
-| `HookExecution` | `stdout`, `stderr`, `suppress_output` |
+| `HookExecution` | `hook_id`, `event_name`, `matcher`, `tool_call_id`, `command`, `timeout`, `status`, `exit_code`, `stdout`, `stderr`, `suppress_output` |
 | `ErrorEvent` | `message`, `error_type`, `timestamp` |
 | `RunResult[T]` | Terminal result described below |
 
@@ -669,8 +647,7 @@ ContentBlock = (
 | Type | Fields |
 | --- | --- |
 | `TextBlock` | `id`, `text` |
-| `ThinkingBlock` | `id`, `thinking`, `signature`, `signature_provider` |
-| `ThinkingBlock` | `duration` |
+| `ThinkingBlock` | `id`, `thinking`, `signature`, `signature_provider`, `duration` |
 | `RedactedThinkingBlock` | `id`, `data` |
 | `ToolUseBlock` | `id`, `name`, `input`, `thought_signature` |
 | `ToolResultBlock` | `id`, `tool_use_id`, `content`, `is_error` |
@@ -770,12 +747,9 @@ print(context.used, context.remaining, context.limit, context.accuracy)
 
 | Type | Fields |
 | --- | --- |
-| `Usage` | `input_tokens`, `output_tokens`, `cache_creation_tokens` |
-| `Usage` | `cache_read_tokens`, `thinking_tokens`, `factory_credits` |
+| `Usage` | `input_tokens`, `output_tokens`, `cache_creation_tokens`, `cache_read_tokens`, `thinking_tokens`, `factory_credits` |
 | `ContextUsage` | `used`, `remaining`, `limit`, `accuracy`, `updated_at` |
-| `ToolProgressUpdate` | `type`, `tool_name`, `status`, `details`, `text` |
-| `ToolProgressUpdate` | `error`, `timestamp`, `parameters`, `value_snippet` |
-| `ToolProgressUpdate` | `terminal_id`, `full_output`, `subagent_session_id` |
+| `ToolProgressUpdate` | `type`, `tool_name`, `status`, `details`, `text`, `error`, `timestamp`, `parameters`, `value_snippet`, `terminal_id`, `full_output`, `subagent_session_id` |
 
 `ToolProgressUpdate.type` is `"tool_call"`, `"tool_result"`, `"error"`,
 `"status"`, or `"message"`.
@@ -853,9 +827,14 @@ stream; it is idempotent after release.
 Message options mirror TypeScript's `images` and `files` fields:
 
 ```python
+from droid_sdk import Document, Image, run
+
 result = await run(
     "Compare these files.",
-    images=[Image.from_path("screenshot.png")],
+    images=[
+        Image.from_path("screenshot.png"),
+        Image.from_bytes(image_bytes, media_type="image/png"),
+    ],
     files=[
         Document.from_path("report.pdf"),
         Document.from_text(source, name="auth.py"),
@@ -863,23 +842,11 @@ result = await run(
 )
 ```
 
-```python
-from droid_sdk import Document, Image
-
-result = await run(
-    "Review these inputs.",
-    images=[Image.from_bytes(image_bytes, media_type="image/png")],
-    files=[Document.from_text(report, name="report.md")],
-)
-```
-
-Path constructors are Python conveniences that produce the same base64 image,
-text-document, or base64-document sources accepted by TypeScript. Supported
-image types are PNG, JPEG, GIF, and WebP. Invalid local input raises
-`InvalidAttachmentError` before the turn starts. Image URLs are unsupported.
-`MAX_ATTACHMENT_BYTES` is `5 * 1024 * 1024`; `MAX_PDF_ATTACHMENT_BYTES` is
-`3 * 1024 * 1024`. `ImageMediaType` is the literal union `"image/jpeg"`,
-`"image/png"`, `"image/gif"`, and `"image/webp"`.
+The constructors produce the same base64 sources the TypeScript SDK accepts.
+Supported image types are PNG, JPEG, GIF, and WebP; image URLs are
+unsupported. Invalid local input raises `InvalidAttachmentError` before the
+turn starts. Attachments are limited to `MAX_ATTACHMENT_BYTES` (5 MiB), and
+PDFs to `MAX_PDF_ATTACHMENT_BYTES` (3 MiB).
 
 ### Input schemas
 
@@ -1111,8 +1078,7 @@ QuestionHandler = Callable[
 | Type | Fields |
 | --- | --- |
 | `InteractionHandlers` | `on_permission`, `on_question` |
-| `PermissionRequest` | `actions`, `options` |
-| `PermissionRequest` | `associated_session_ids` |
+| `PermissionRequest` | `actions`, `options`, `associated_session_ids` |
 | `PermissionOption` | `label`, `value` |
 | `PermissionResponse` | `selected_option`, `comment`, `edited_spec_content` |
 | `QuestionRequest` | `tool_call_id`, `questions` |
@@ -1141,20 +1107,14 @@ Every action includes its `tool_use`, confirmation type, and typed details:
 | Type | Detail fields |
 | --- | --- |
 | `EditAction` | `file_path`, `file_name`, `old_content`, `new_content` |
-| `ExecuteAction` | `full_command`, `command`, `extracted_commands` |
-| `ExecuteAction` | `impact_level`, `risk_level_reason` |
+| `ExecuteAction` | `full_command`, `command`, `extracted_commands`, `impact_level`, `risk_level_reason` |
 | `CreateFile` | `file_path`, `file_name`, `content` |
 | `AskUserAction` | `questionnaire`, `questions`, `parse_error` |
 | `ExitSpecModeAction` | `plan`, `title` |
-| `ApplyPatchAction` | `file_path`, `file_name`, `patch_content` |
-| `ApplyPatchAction` | `old_content`, `new_content`, `files` |
-| `ApplyPatchFile` | `file_path`, `file_name`, `operation`, `move_to` |
-| `ApplyPatchFile` | `old_content`, `new_content` |
-| `McpToolAction` | `tool_name`, `server_name`, `actual_tool_name` |
-| `McpToolAction` | `impact_level` |
-| `SandboxViolationAction` | `violating_tool_name`, `target`, `operation` |
-| `SandboxViolationAction` | `violation_type`, `reason`, `violation_reason` |
-| `SandboxViolationAction` | `is_org_deny` |
+| `ApplyPatchAction` | `file_path`, `file_name`, `patch_content`, `old_content`, `new_content`, `files` |
+| `ApplyPatchFile` | `file_path`, `file_name`, `operation`, `move_to`, `old_content`, `new_content` |
+| `McpToolAction` | `tool_name`, `server_name`, `actual_tool_name`, `impact_level` |
+| `SandboxViolationAction` | `violating_tool_name`, `target`, `operation`, `violation_type`, `reason`, `violation_reason`, `is_org_deny` |
 | `DroidShieldViolationAction` | `command`, `reason` |
 
 `AskUserParseError(message: str, line: int | None = None)` records malformed
@@ -1214,11 +1174,8 @@ The four override parameters accept `set[str]`, `frozenset[str]`, or `None`.
 
 | Type | Fields |
 | --- | --- |
-| `ToolInfo` | `id`, `display_name`, `description`, `category` |
-| `ToolInfo` | `default_allowed`, `allowed` |
-| `ListToolsOptions` | `model`, `mode`, `autonomy`, `spec_model` |
-| `ListToolsOptions` | `additional_tools`, `enabled_tools`, `disabled_tools` |
-| `ListToolsOptions` | `restrict_tools`, `skip_permissions_unsafe` |
+| `ToolInfo` | `id`, `display_name`, `description`, `category`, `default_allowed`, `allowed` |
+| `ListToolsOptions` | `model`, `mode`, `autonomy`, `spec_model`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools`, `skip_permissions_unsafe` |
 
 ## Tools and extensions
 
@@ -1253,9 +1210,7 @@ Skills may come from project, personal, built-in, or automation settings.
 | Type | Fields |
 | --- | --- |
 | `SkillsResult` | `skills`, `project_available` |
-| `SkillInfo` | `name`, `description`, `location`, `file_path`, `enabled` |
-| `SkillInfo` | `user_invocable`, `version`, `content`, `resources` |
-| `SkillInfo` | `disabled_by` |
+| `SkillInfo` | `name`, `description`, `location`, `file_path`, `enabled`, `user_invocable`, `version`, `content`, `resources`, `disabled_by` |
 | `SkillResource` | `name`, `path`, `type` |
 | `SkillMutationResult` | `success` |
 
@@ -1354,6 +1309,8 @@ passed through `SessionConfig` are session-scoped.
 
 | Session MCP method | Signature |
 | --- | --- |
+| `list_mcp_servers` | `() -> McpServersResult` |
+| `list_mcp_tools` | `() -> list[McpToolInfo]` |
 | `add_mcp_server` | `(config) -> McpMutationResult` |
 | `remove_mcp_server` | `(name: str) -> McpMutationResult` |
 | `enable_mcp_server` / `disable_mcp_server` | `(name: str) -> McpMutationResult` |
@@ -1380,34 +1337,16 @@ McpServerConfig = (
 | `HttpMcpServerConfig` | `name`, `url`, `headers`, `oauth` |
 | `SseMcpServerConfig` | `name`, `url`, `headers`, `oauth` |
 | `HttpHeader` | `name`, `value` |
-| `McpOAuthOptions` | `scopes`, `resource`, `authorization_server_issuer` |
-| `McpOAuthOptions` | `client_metadata_url`, `client_id`, `client_secret` |
-| `McpOAuthOptions` | `callback_port`, `token_endpoint_auth_method` |
+| `McpOAuthOptions` | `scopes`, `resource`, `authorization_server_issuer`, `client_metadata_url`, `client_id`, `client_secret`, `callback_port`, `token_endpoint_auth_method` |
 | `McpServersResult` | `servers`, `summary` |
-| `McpServerStatusInfo` | `name`, `status`, `source`, `is_managed`, `error` |
-| `McpServerStatusInfo` | `tool_count`, `server_type`, `has_auth_tokens` |
-| `McpServerStatusInfo` | `requires_auth`, `pending_auth_url` |
-| `McpServerStatusInfo` | `pending_auth_message`, `pending_auth_state` |
-| `McpStatusSummary` | `total`, `connected`, `connecting` |
-| `McpStatusSummary` | `failed`, `disabled` |
-| `McpStatusSummary` | `config_error` |
+| `McpServerStatusInfo` | `name`, `status`, `source`, `is_managed`, `error`, `tool_count`, `server_type`, `has_auth_tokens`, `requires_auth`, `pending_auth_url`, `pending_auth_message`, `pending_auth_state` |
+| `McpStatusSummary` | `total`, `connected`, `connecting`, `failed`, `disabled`, `config_error` |
 | `McpConfigError` | `path`, `message` |
-| `McpToolInfo` | `server_name`, `name`, `description`, `is_enabled` |
-| `McpToolInfo` | `is_read_only`, `input_schema` |
+| `McpToolInfo` | `server_name`, `name`, `description`, `is_enabled`, `is_read_only`, `input_schema` |
 | `McpToolInputSchema` | `type`, `properties`, `required` |
 | `McpMutationResult` | `success` |
 
 `oauth` accepts `McpOAuthOptions` or `False`.
-
-| Method | Returns |
-| --- | --- |
-| `list_mcp_servers()` | `McpServersResult` |
-| `list_mcp_tools()` | `list[McpToolInfo]` |
-| `add_mcp_server(...)` | `McpMutationResult` |
-| `remove_mcp_server(...)` | `McpMutationResult` |
-| `enable_mcp_server(...)` | `McpMutationResult` |
-| `disable_mcp_server(...)` | `McpMutationResult` |
-| `authenticate_mcp_server(...)` | `McpMutationResult` |
 
 Remove, enable, and disable mutate user-scoped MCP configuration only. These
 methods do not accept a project-scope argument.
@@ -1487,8 +1426,7 @@ async with outcome.session as rewound:
 | `RewindFileSnapshot` | `file_path`, `content_hash`, `size` |
 | `RewindFileCreation` | `file_path` |
 | `RewindEvictedFile` | `file_path`, `reason` |
-| `RewindOutcome` | `session`, `restored_count`, `deleted_count` |
-| `RewindOutcome` | `failed_restore_count`, `failed_delete_count` |
+| `RewindOutcome` | `session`, `restored_count`, `deleted_count`, `failed_restore_count`, `failed_delete_count` |
 
 ### Successor ownership
 
@@ -1749,29 +1687,19 @@ root.
 | `Autonomy` | `OFF`, `LOW`, `MEDIUM`, `HIGH` |
 | `ReasoningEffort` | See supported values below |
 | `ToolCategory` | `READ`, `EDIT`, `EXECUTE`, `OTHER` |
-| `ToolConfirmationType` | `EDIT`, `EXECUTE`, `CREATE`, `ASK_USER` |
-| `ToolConfirmationType` | `EXIT_SPEC_MODE`, `APPLY_PATCH`, `MCP_TOOL` |
-| `ToolConfirmationType` | `SANDBOX_VIOLATION`, `DROID_SHIELD_VIOLATION` |
+| `ToolConfirmationType` | `EDIT`, `EXECUTE`, `CREATE`, `ASK_USER`, `EXIT_SPEC_MODE`, `APPLY_PATCH`, `MCP_TOOL`, `SANDBOX_VIOLATION`, `DROID_SHIELD_VIOLATION` |
 | `ToolConfirmationOutcome` | Permission outcomes offered by Droid |
-| `WorkingState` | `IDLE`, `THINKING`, `STREAMING_ASSISTANT_MESSAGE` |
-| `WorkingState` | `WAITING_FOR_TOOL_CONFIRMATION`, `EXECUTING_TOOL` |
-| `WorkingState` | `COMPACTING_CONVERSATION` |
+| `WorkingState` | `IDLE`, `THINKING`, `STREAMING_ASSISTANT_MESSAGE`, `WAITING_FOR_TOOL_CONFIRMATION`, `EXECUTING_TOOL`, `COMPACTING_CONVERSATION` |
 | `ContextAccuracy` | `EXACT`, `ESTIMATED` |
 | `McpServerType` | `STDIO`, `HTTP`, `SSE` |
-| `McpServerStatus` | `CONNECTING`, `CONNECTED`, `DISCONNECTED` |
-| `McpServerStatus` | `FAILED`, `DISABLED` |
+| `McpServerStatus` | `CONNECTING`, `CONNECTED`, `DISCONNECTED`, `FAILED`, `DISABLED` |
 | `McpAuthOutcome` | `SUCCESS`, `CANCELLED`, `FAILED` |
 | `OAuthTokenEndpointAuthMethod` | `NONE`, `CLIENT_SECRET_BASIC`, `CLIENT_SECRET_POST` |
-| `SessionPlatform` | `SLACK`, `WEB`, `API`, `SESSIONS_API`, `JIRA`, `LINEAR` |
-| `SessionPlatform` | `MICROSOFT_TEAMS`, `READINESS_REMEDIATION`, `READINESS_EVALUATION` |
-| `SessionPlatform` | `AUTOMATION`, `WIKI_GENERATION`, `WIKI_CI_SETUP`, `TUI` |
-| `SessionPlatform` | `DESKTOP`, `ACP`, `UNKNOWN` |
+| `SessionPlatform` | `SLACK`, `WEB`, `API`, `SESSIONS_API`, `JIRA`, `LINEAR`, `MICROSOFT_TEAMS`, `READINESS_REMEDIATION`, `READINESS_EVALUATION`, `AUTOMATION`, `WIKI_GENERATION`, `WIKI_CI_SETUP`, `TUI`, `DESKTOP`, `ACP`, `UNKNOWN` |
 | `SandboxOperation` | `READ`, `WRITE`, `NETWORK`, `TOOL` |
 | `SandboxViolationType` | `FILESYSTEM_READ`, `FILESYSTEM_WRITE`, `NETWORK`, `TOOL` |
 | `SandboxViolationReason` | `DENY_LIST`, `NOT_ALLOWED` |
-| `ErrorType` | `CONNECTION_ERROR`, `PROTOCOL_ERROR`, `SESSION_ERROR` |
-| `ErrorType` | `TIMEOUT_ERROR`, `DROID_CLIENT_ERROR`, `PROCESS_EXIT_ERROR` |
-| `ErrorType` | `ERROR` |
+| `ErrorType` | `CONNECTION_ERROR`, `PROTOCOL_ERROR`, `SESSION_ERROR`, `TIMEOUT_ERROR`, `DROID_CLIENT_ERROR`, `PROCESS_EXIT_ERROR`, `ERROR` |
 
 `ReasoningEffort` defines `NONE`, `DYNAMIC`, `OFF`, `MINIMAL`, `LOW`,
 `MEDIUM`, `HIGH`, `EXTRA_HIGH`, and `MAX`. Model and tool IDs remain strings.
