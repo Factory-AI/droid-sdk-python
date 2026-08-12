@@ -185,10 +185,13 @@ await session.update_settings(
 )
 ```
 
+See [Update settings](#update-settings) for the full `update_settings()`
+contract.
+
 ### Configure mode-specific models
 
 ```python
-from droid_sdk import Mode, Session, SessionConfig
+from droid_sdk import Mode, ReasoningEffort, Session, SessionConfig
 
 config = SessionConfig(
     mode=Mode.SPEC,
@@ -213,8 +216,8 @@ The primary model handles Auto turns. `spec_model` handles Spec turns.
 | `spec_model` | `str \| None` | `SessionConfig`, `update_settings()` |
 | `spec_reasoning_effort` | `ReasoningEffort \| None` | Same |
 
-Model IDs are opaque strings. `None` uses the configured default. Setting a
-nullable Spec field to `None` through `update_settings()` clears it.
+`None` uses the configured default. Setting a Spec field to `None` through
+`update_settings()` clears it.
 
 ## Sessions
 
@@ -233,6 +236,9 @@ async with Session(
         async for message in stream:
             handle(message)
 ```
+
+Configure behavior and attach handlers with `SessionConfig` and
+`InteractionHandlers`:
 
 ```python
 from droid_sdk import Autonomy, InteractionHandlers, SessionConfig
@@ -267,11 +273,18 @@ async with Session.resume(
             pass
 ```
 
-Resume restores conversation history, working directory, title, and settings.
-It can reattach interaction handlers, MCP servers, observability, transport,
-the disabled-tool policy, built-in-skill policy, automatic permission
-rejection, and source attribution. It does not accept a new working directory
-or model.
+Resume restores conversation history, working directory, title, and settings;
+runtime concerns such as handlers and MCP servers must be attached again (see
+the table below). It does not accept a new working directory or model.
+
+### What persists
+
+| Restored | Attach again |
+| --- | --- |
+| Conversation history | Interaction handlers |
+| Working directory | Session-scoped MCP servers |
+| Title | Observability sinks |
+| Session settings | Custom transport |
 
 ### Open and close manually
 
@@ -306,8 +319,8 @@ print(session.settings.model)
 print(session.settings.mode)
 ```
 
-These properties are read-only. The immutable settings snapshot updates when
-Droid reports a settings change.
+These properties are read-only. `settings` is an immutable snapshot, replaced
+when Droid reports a settings change.
 
 ### Update settings
 
@@ -373,11 +386,7 @@ for saved in await list_sessions(limit=10):
     print(saved.id, saved.title, saved.modified_at)
 ```
 
-List sessions across working directories:
-
-```python
-sessions = await list_sessions(all_workspaces=True, limit=20)
-```
+Pass `all_workspaces=True` to list sessions across working directories.
 
 `list_sessions()` reads local files without starting Droid. Results are newest
 first. Timestamps are timezone-aware.
@@ -457,15 +466,6 @@ fields default to `None`: `delegation_session_id`, `team_id`, `channel`,
 `channel_id`, `aad_object_id`, `report_id`, `repo_url`, `criterion_id`, and
 `computer_id`. Required combinations are validated when converted to the
 wire protocol.
-
-### What persists
-
-| Restored | Attach again |
-| --- | --- |
-| Conversation history | Interaction handlers |
-| Working directory | Session-scoped MCP servers |
-| Title | Observability sinks |
-| Session settings | Custom transport |
 
 ## Streaming and results
 
