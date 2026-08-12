@@ -1,0 +1,31 @@
+tests/test_v5_mcp.py
+  3b6dee923a82df82 4-5,55-72
+src/droid_sdk/mcp.py
+  3b6dee923a82df82 17-32
+README.md
+  3b6dee923a82df82 132-136
+docs/python-sdk-reference.md
+  3b6dee923a82df82 29-34,1268-1269,1320-1321,1323
+pyproject.toml
+  3b6dee923a82df82 10-15,28-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "a5d7ff9c8648a1ed179db89fa766ac8063785a7f",
+  "prompts": {
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 15,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    }
+  }
+}
