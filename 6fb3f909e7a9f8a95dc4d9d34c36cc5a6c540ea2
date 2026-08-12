@@ -1,0 +1,29 @@
+src/droid_sdk/_high_level/streaming.py
+  3b6dee923a82df82 113-116,951
+tests/test_v5_mcp.py
+  3b6dee923a82df82 208,210-211,257,284-285
+src/droid_sdk/_high_level/extensions.py
+  3b6dee923a82df82 190-194
+src/droid_sdk/mcp.py
+  3b6dee923a82df82 16,193,195,201-212,335-336,340-343,345-350,353-364,367,372-373,473,476-478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "6fb3f909e7a9f8a95dc4d9d34c36cc5a6c540ea2",
+  "prompts": {
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 63,
+      "total_deletions": 60,
+      "accepted_lines": 62,
+      "overriden_lines": 0
+    }
+  }
+}
