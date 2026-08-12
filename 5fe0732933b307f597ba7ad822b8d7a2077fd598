@@ -1,0 +1,23 @@
+docs/python-sdk-reference.md
+  6a64c2829661fd81 1023-1024,1051,1155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "5fe0732933b307f597ba7ad822b8d7a2077fd598",
+  "prompts": {
+    "6a64c2829661fd81": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "87840782-b26d-4cd5-878a-6df42e2ff992",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 7,
+      "accepted_lines": 73,
+      "overriden_lines": 0
+    }
+  }
+}
