@@ -1,0 +1,38 @@
+examples/stream_events.py
+  4bf304a5f87e35f0 1-52,57-79
+docs/python-sdk-reference.md
+  4bf304a5f87e35f0 1768
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "dfe6aab8101773a8195ea3013a9a21a46aa72824",
+  "prompts": {
+    "4bf304a5f87e35f0": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f1ea041a-e00a-4a4f-a641-533a7cc3b4a4",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 76,
+      "overriden_lines": 0
+    },
+    "6a64c2829661fd81": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "87840782-b26d-4cd5-878a-6df42e2ff992",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 76,
+      "overriden_lines": 0
+    }
+  }
+}
