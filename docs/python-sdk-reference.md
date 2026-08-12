@@ -1191,7 +1191,8 @@ for skill in skills.skills:
     print(skill.name, skill.enabled)
 ```
 
-`skills.project_available` preserves the TypeScript result metadata.
+`skills.project_available` reports whether a project skill scope is
+available; it is `None` when Droid does not report it.
 
 Enable or disable a skill:
 
@@ -1255,12 +1256,10 @@ session. Attach in-process servers again when resuming.
 | `SdkMcpServer` | `name`, `version`, `tools` |
 | `ToolResponse` | `content`, `is_error`, `structured_content` |
 
-`tool(name, description)` is a decorator.
-`tool(name, description, function)` is the equivalent direct-call overload.
-It accepts synchronous or asynchronous functions. Parameters and return
-annotations form the input and output schemas. Object-shaped typed returns
-are validated at invocation time, returned as structured content, and
-advertised through the MCP `outputSchema` field.
+`tool(name, description)` is a decorator;
+`tool(name, description, function)` is the equivalent direct call. A return
+annotation that describes an object is validated at call time, returned as
+structured content, and advertised through the MCP `outputSchema` field.
 
 `create_sdk_mcp_server(name, tools, version="1.0.0")` returns `SdkMcpServer`.
 `SdkMcpServer.config` is the active `HttpMcpServerConfig` or `None`;
@@ -1350,13 +1349,10 @@ methods do not accept a project-scope argument.
 
 ### Hooks
 
-Hooks remain configured in `.factory/hooks.json`. Hook execution appears as
-`HookExecution` values in the run stream.
-
-The Python SDK does not define a second programmatic hook system.
-`HookExecution.status` is `"started"`, `"completed"`, or `"error"`.
-An empty or missing `hookResults` list does not synthesize a phantom terminal
-hook event.
+There is no Python API for defining hooks; configure them in
+`.factory/hooks.json`. Hook execution appears as `HookExecution` values in
+the run stream. `HookExecution.status` is `"started"`, `"completed"`, or
+`"error"`.
 
 ## Session lifecycle
 
