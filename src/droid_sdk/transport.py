@@ -18,6 +18,7 @@ import signal
 from collections.abc import AsyncIterator  # noqa: TC003
 from typing import Any
 
+from droid_sdk._util import consume_task_result
 from droid_sdk.errors import DroidConnectionError, DroidProcessError
 
 logger = logging.getLogger(__name__)
@@ -440,7 +441,7 @@ class ProcessTransport:
             await asyncio.shield(task)
         except asyncio.CancelledError:
             if not task.done():
-                task.add_done_callback(_consume_task_result)
+                task.add_done_callback(consume_task_result)
                 raise
             with contextlib.suppress(asyncio.CancelledError):
                 task.result()
@@ -452,11 +453,6 @@ class ProcessTransport:
         if not diagnostic:
             return message
         return f"{message}; stderr: {diagnostic}"
-
-
-def _consume_task_result(task: asyncio.Task[None]) -> None:
-    with contextlib.suppress(BaseException):
-        task.result()
 
 
 __all__ = [

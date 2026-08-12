@@ -32,6 +32,7 @@ from droid_sdk import (
 )
 from droid_sdk.mcp import create_sdk_mcp_server
 from droid_sdk.observability import LogEvent, MetricEvent, Observability
+from droid_sdk.schemas.client import SessionSettings as WireSessionSettings
 from droid_sdk.schemas.enums import (
     ReasoningEffort as WireReasoningEffort,
 )
@@ -42,20 +43,13 @@ if TYPE_CHECKING:
     from droid_sdk.types import DroidClientTransport
 
 
-def wire_settings() -> SimpleNamespace:
-    return SimpleNamespace(
+def wire_settings() -> WireSessionSettings:
+    return WireSessionSettings(
         model_id="model",
         reasoning_effort=WireReasoningEffort.Medium,
-        interaction_mode=None,
-        autonomy_level=None,
         spec_mode_model_id="spec-model",
         spec_mode_reasoning_effort=WireReasoningEffort.High,
         tags=[],
-        sandbox=None,
-        additional_tool_ids=None,
-        enabled_tool_ids=None,
-        disabled_tool_ids=None,
-        restrict_tool_ids=None,
     )
 
 

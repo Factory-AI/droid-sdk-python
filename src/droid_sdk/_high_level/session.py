@@ -9,24 +9,33 @@ import contextlib
 import importlib.metadata
 import os
 import uuid
-from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
 from pydantic import BaseModel, ValidationError
 
-from droid_sdk._high_level._immutable import JsonObject
-from droid_sdk._high_level.attachments import (
-    Document,
-    Image,
-    PdfDocumentSource,
-    TextDocumentSource,
+from droid_sdk._high_level._convert import (
+    document_to_wire,
+    full_settings_from_wire,
+    header_mapping,
+    list_or_none,
+    load_cwd,
+    mcp_config_to_wire,
+    mcp_server_from_wire,
+    mcp_summary_from_wire,
+    merged_settings,
+    raw_inner_notification,
+    tool_category,
+    wire_reasoning,
+    wire_source,
+    wire_tags,
 )
+from droid_sdk._high_level._immutable import JsonObject
+from droid_sdk._high_level.attachments import Document, Image
 from droid_sdk._high_level.config import (
     JsonSchema,
-    SandboxSettings,
     SessionConfig,
     SessionSettings,
     SessionSource,
@@ -36,21 +45,15 @@ from droid_sdk._high_level.config import (
 from droid_sdk._high_level.enums import (
     Autonomy,
     ContextAccuracy,
-    McpServerStatus,
-    McpServerType,
     Mode,
     ReasoningEffort,
-    ToolCategory,
 )
 from droid_sdk._high_level.extensions import (
     CompactOutcome,
     HttpMcpServerConfig,
-    McpConfigError,
     McpMutationResult,
     McpServerConfig,
     McpServersResult,
-    McpServerStatusInfo,
-    McpStatusSummary,
     McpToolInfo,
     McpToolInputSchema,
     RewindEvictedFile,
@@ -78,6 +81,7 @@ from droid_sdk._high_level.messages import (
 from droid_sdk._high_level.output import prepare_output_adapter
 from droid_sdk._high_level.runtime import Runtime
 from droid_sdk._high_level.streaming import RunStream
+from droid_sdk._util import consume_task_result
 from droid_sdk.client import DroidClient
 from droid_sdk.errors import (
     DroidConnectionError,
@@ -90,18 +94,8 @@ from droid_sdk.errors import (
     SessionReplacementError,
 )
 from droid_sdk.observability import ObservabilityAdapter
-from droid_sdk.schemas.client import (
-    AddUserMessageRequestParams,
-    HttpMcpConfig,
-    SseMcpConfig,
-    StdioMcpConfig,
-)
-from droid_sdk.schemas.client import (
-    HttpHeader as WireHttpHeader,
-)
-from droid_sdk.schemas.client import (
-    McpOAuthOptions as WireMcpOAuthOptions,
-)
+from droid_sdk.schemas.cli import SettingsUpdatedNotification
+from droid_sdk.schemas.client import AddUserMessageRequestParams
 from droid_sdk.schemas.enums import (
     AutonomyLevel as WireAutonomy,
 )
@@ -112,10 +106,10 @@ from droid_sdk.schemas.enums import (
 from droid_sdk.schemas.enums import (
     McpServerType as WireMcpServerType,
 )
-from droid_sdk.schemas.enums import (
-    ReasoningEffort as WireReasoningEffort,
-)
 from droid_sdk.transport import ProcessTransport
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping, Sequence
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -136,124 +130,6 @@ class _State(Enum):
     RETIRED = "retired"
     CLOSING = "closing"
     CLOSED = "closed"
-
-
-def _wire_reasoning(value: ReasoningEffort | None) -> WireReasoningEffort | None:
-    return None if value is None else WireReasoningEffort(value.value)
-
-
-def _wire_source(value: SessionSource | None) -> dict[str, object] | None:
-    if value is None:
-        return None
-    return {
-        key: item.value if isinstance(item, Enum) else item
-        for key, item in (
-            (field, getattr(value, field)) for field in value.__dataclass_fields__
-        )
-        if item is not None
-    }
-
-
-def _wire_tags(values: Sequence[SessionTag]) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": value.name,
-            **({} if value.metadata is None else {"metadata": dict(value.metadata)}),
-        }
-        for value in values
-    ]
-
-
-def _settings(value: Any) -> SessionSettings:
-    mode = (
-        None
-        if value.interaction_mode is None
-        or value.interaction_mode.value not in {"auto", "spec"}
-        else Mode(value.interaction_mode.value)
-    )
-    autonomy = (
-        None if value.autonomy_level is None else Autonomy(value.autonomy_level.value)
-    )
-    sandbox = (
-        None
-        if value.sandbox is None
-        else SandboxSettings(
-            enabled=value.sandbox.enabled,
-            mode=None if value.sandbox.mode is None else value.sandbox.mode.value,
-        )
-    )
-    return SessionSettings(
-        model=value.model_id,
-        reasoning_effort=ReasoningEffort(value.reasoning_effort.value),
-        mode=mode,
-        autonomy=autonomy,
-        spec_model=value.spec_mode_model_id,
-        spec_reasoning_effort=(
-            None
-            if value.spec_mode_reasoning_effort is None
-            else ReasoningEffort(value.spec_mode_reasoning_effort.value)
-        ),
-        tags=tuple(
-            SessionTag(name=tag.name, metadata=tag.metadata)
-            for tag in (value.tags or ())
-        ),
-        sandbox=sandbox,
-        additional_tools=value.additional_tool_ids,
-        enabled_tools=value.enabled_tool_ids,
-        disabled_tools=value.disabled_tool_ids,
-        restrict_tools=value.restrict_tool_ids,
-    )
-
-
-def _mcp_config(value: McpServerConfig) -> dict[str, Any]:
-    if isinstance(value, SdkMcpServer):
-        raise TypeError("SDK MCP servers must be started before serialization")
-    try:
-        if isinstance(value, StdioMcpServerConfig):
-            model: BaseModel = StdioMcpConfig(
-                name=value.name,
-                command=value.command,
-                args=list(value.args),
-                env=dict(value.env),
-            )
-        else:
-            oauth: WireMcpOAuthOptions | Literal[False] | None
-            if value.oauth is None or value.oauth is False:
-                oauth = value.oauth
-            else:
-                oauth = WireMcpOAuthOptions.model_validate(
-                    {
-                        field: (item.value if isinstance(item, Enum) else item)
-                        for field, item in (
-                            (field, getattr(value.oauth, field))
-                            for field in value.oauth.__dataclass_fields__
-                        )
-                        if item is not None
-                    }
-                )
-            headers = [
-                WireHttpHeader(name=header.name, value=header.value)
-                for header in value.headers
-            ]
-            if isinstance(value, HttpMcpServerConfig):
-                model = HttpMcpConfig(
-                    type="http",
-                    name=value.name,
-                    url=value.url,
-                    headers=headers,
-                    oauth=oauth,
-                )
-            else:
-                model = SseMcpConfig(
-                    type="sse",
-                    name=value.name,
-                    url=value.url,
-                    headers=headers,
-                    oauth=oauth,
-                )
-    except (ValidationError, ValueError):
-        raise ValueError("Invalid MCP server configuration") from None
-    return model.model_dump(by_alias=True, exclude_none=True)
 
 
 class Session:
@@ -483,9 +359,9 @@ class Session:
                 if isinstance(server, SdkMcpServer):
                     started.append(server)
                     config = await server.start()
-                    configs.append(_mcp_config(config))
+                    configs.append(mcp_config_to_wire(config))
                 else:
-                    configs.append(_mcp_config(server))
+                    configs.append(mcp_config_to_wire(server))
             self._load_mcp_configs = configs
 
             runtime = self._runtime_config
@@ -538,7 +414,7 @@ class Session:
                 load_result = await client.load_session(
                     session_id=self._resume_id,
                     mcp_servers=configs or None,
-                    disabled_tool_ids=_list_or_none(
+                    disabled_tool_ids=list_or_none(
                         self._resume_options["disabled_tools"]
                     ),
                     auto_reject_permission_requests=cast(
@@ -549,7 +425,7 @@ class Session:
                         "bool | None",
                         self._resume_options["disable_builtin_skills"],
                     ),
-                    session_source=_wire_source(
+                    session_source=wire_source(
                         cast(
                             "SessionSource | None",
                             self._resume_options["session_source"],
@@ -557,7 +433,7 @@ class Session:
                     ),
                 )
                 session_id = self._resume_id
-                cwd_value = _load_cwd(load_result, requested_cwd)
+                cwd_value = load_cwd(load_result, requested_cwd)
                 wire_settings = load_result.settings
             else:
                 sdk_tag = SessionTag(
@@ -585,17 +461,17 @@ class Session:
                         else WireAutonomy(self._config.autonomy.value)
                     ),
                     model_id=self._model,
-                    reasoning_effort=_wire_reasoning(self._reasoning_effort),
+                    reasoning_effort=wire_reasoning(self._reasoning_effort),
                     spec_mode_model_id=self._config.spec_model,
-                    spec_mode_reasoning_effort=_wire_reasoning(
+                    spec_mode_reasoning_effort=wire_reasoning(
                         self._config.spec_reasoning_effort
                     ),
-                    additional_tool_ids=_list_or_none(self._config.additional_tools),
-                    enabled_tool_ids=_list_or_none(self._config.enabled_tools),
-                    disabled_tool_ids=_list_or_none(self._config.disabled_tools),
-                    restrict_tool_ids=_list_or_none(self._config.restrict_tools),
-                    session_source=_wire_source(self._config.session_source),
-                    tags=cast("Any", _wire_tags(tags)),
+                    additional_tool_ids=list_or_none(self._config.additional_tools),
+                    enabled_tool_ids=list_or_none(self._config.enabled_tools),
+                    disabled_tool_ids=list_or_none(self._config.disabled_tools),
+                    restrict_tool_ids=list_or_none(self._config.restrict_tools),
+                    session_source=wire_source(self._config.session_source),
+                    tags=cast("Any", wire_tags(tags)),
                     auto_reject_permission_requests=(
                         self._config.auto_reject_permission_requests
                     ),
@@ -608,7 +484,7 @@ class Session:
             self._client = client
             self._id = session_id
             self._cwd = cwd_value
-            self._settings = _settings(wire_settings)
+            self._settings = full_settings_from_wire(wire_settings)
             self._sdk_servers = started
             self._bind_metadata()
             if self._state is _State.OPENING:
@@ -910,7 +786,7 @@ class Session:
                         for image in images
                     ]
                     or None,
-                    "files": [_document_source(file) for file in files] or None,
+                    "files": [document_to_wire(file) for file in files] or None,
                     "outputFormat": adapter.output_format,
                 }
             )
@@ -934,7 +810,7 @@ class Session:
             self._dispatcher.error_sink = None
             if interrupt and client is not None:
                 task = asyncio.create_task(client.interrupt_session())
-                task.add_done_callback(_consume_task_result)
+                task.add_done_callback(consume_task_result)
             if interrupt:
                 status = "interrupted"
             elif stream_value.completed:
@@ -1006,20 +882,20 @@ class Session:
             explicit_null_fields.append("specModeReasoningEffort")
         await self._require_client().update_session_settings(
             model_id=model,
-            reasoning_effort=_wire_reasoning(reasoning_effort),
+            reasoning_effort=wire_reasoning(reasoning_effort),
             interaction_mode=(
                 None if mode is None else DroidInteractionMode(mode.value)
             ),
             autonomy_level=(None if autonomy is None else WireAutonomy(autonomy.value)),
             spec_mode_model_id=spec_model_value,
-            spec_mode_reasoning_effort=_wire_reasoning(spec_reasoning_value),
-            tags=cast("Any", None if tags is None else _wire_tags(tags)),
+            spec_mode_reasoning_effort=wire_reasoning(spec_reasoning_value),
+            tags=cast("Any", None if tags is None else wire_tags(tags)),
             compaction_token_limit=compaction_token_limit,
             compaction_threshold_check_enabled=(compaction_threshold_check_enabled),
-            additional_tool_ids=_list_or_none(additional_tools),
-            enabled_tool_ids=_list_or_none(enabled_tools),
-            disabled_tool_ids=_list_or_none(disabled_tools),
-            restrict_tool_ids=_list_or_none(restrict_tools),
+            additional_tool_ids=list_or_none(additional_tools),
+            enabled_tool_ids=list_or_none(enabled_tools),
+            disabled_tool_ids=list_or_none(disabled_tools),
+            restrict_tool_ids=list_or_none(restrict_tools),
             explicit_null_fields=explicit_null_fields,
         )
         for key, value in (
@@ -1080,7 +956,7 @@ class Session:
         self._ensure_active()
 
         def dispatch(raw: dict[str, Any]) -> None:
-            inner = _inner_notification(raw)
+            inner = raw_inner_notification(raw)
             if inner is None:
                 return
             if type is None or inner.get("type") == type:
@@ -1116,10 +992,10 @@ class Session:
             ),
             autonomy_level=(None if autonomy is None else WireAutonomy(autonomy.value)),
             spec_mode_model_id=spec_model,
-            additional_tool_ids=_list_or_none(additional_tools),
-            enabled_tool_ids=_list_or_none(enabled_tools),
-            disabled_tool_ids=_list_or_none(disabled_tools),
-            restrict_tool_ids=_list_or_none(restrict_tools),
+            additional_tool_ids=list_or_none(additional_tools),
+            enabled_tool_ids=list_or_none(enabled_tools),
+            disabled_tool_ids=list_or_none(disabled_tools),
+            restrict_tool_ids=list_or_none(restrict_tools),
             skip_permissions_unsafe=skip_permissions_unsafe,
         )
         return [
@@ -1127,7 +1003,7 @@ class Session:
                 id=item.llm_id or item.id,
                 display_name=item.display_name or item.llm_id or item.id,
                 description=item.description or "",
-                category=_tool_category(item.category),
+                category=tool_category(item.category),
                 default_allowed=item.default_allowed,
                 allowed=item.currently_allowed,
             )
@@ -1197,8 +1073,8 @@ class Session:
         self._ensure_active()
         result = await self._require_client().list_mcp_servers()
         return McpServersResult(
-            servers=tuple(_mcp_server(item) for item in result.servers),
-            summary=_mcp_summary(result.summary),
+            servers=tuple(mcp_server_from_wire(item) for item in result.servers),
+            summary=mcp_summary_from_wire(result.summary),
         )
 
     async def list_mcp_tools(self) -> list[McpToolInfo]:
@@ -1229,7 +1105,7 @@ class Session:
         config: StdioMcpServerConfig | HttpMcpServerConfig | SseMcpServerConfig,
     ) -> McpMutationResult:
         self._ensure_active()
-        raw = _mcp_config(config)
+        raw = mcp_config_to_wire(config)
         headers = cast("object", raw.get("headers"))
         result = await self._require_client().add_mcp_server(
             name=config.name,
@@ -1238,7 +1114,7 @@ class Session:
             headers=(
                 None
                 if not isinstance(headers, list)
-                else _header_mapping(cast("list[object]", headers))
+                else header_mapping(cast("list[object]", headers))
             ),
             command=cast("str | None", raw.get("command")),
             args=cast("list[str] | None", raw.get("args")),
@@ -1396,7 +1272,7 @@ class Session:
         _, successor = await self._replacement_operation(
             lambda: self._require_client().fork_session(
                 title=title,
-                tags=cast("Any", None if tags is None else _wire_tags(tags)),
+                tags=cast("Any", None if tags is None else wire_tags(tags)),
             )
         )
         return successor
@@ -1518,8 +1394,8 @@ class Session:
         client = successor._require_client()
         try:
             restored = await self._load_with_policies(client, self.id)
-            self._settings = _settings(restored.settings)
-            self._cwd = _load_cwd(restored, self._cwd or Path.cwd())
+            self._settings = full_settings_from_wire(restored.settings)
+            self._cwd = load_cwd(restored, self._cwd or Path.cwd())
         except BaseException:
             self._state = _State.CLOSING
             with contextlib.suppress(BaseException):
@@ -1559,8 +1435,8 @@ class Session:
         except BaseException as cause:
             try:
                 restored = await self._load_with_policies(client, self.id)
-                self._settings = _settings(restored.settings)
-                self._cwd = _load_cwd(restored, self._cwd or Path.cwd())
+                self._settings = full_settings_from_wire(restored.settings)
+                self._cwd = load_cwd(restored, self._cwd or Path.cwd())
             except BaseException as rollback:
                 self._state = _State.CLOSING
                 with contextlib.suppress(BaseException):
@@ -1575,8 +1451,8 @@ class Session:
         successor = object.__new__(Session)
         successor.__dict__ = self.__dict__.copy()
         successor._id = replacement_id
-        successor._settings = _settings(loaded.settings)
-        successor._cwd = _load_cwd(loaded, self._cwd or Path.cwd())
+        successor._settings = full_settings_from_wire(loaded.settings)
+        successor._cwd = load_cwd(loaded, self._cwd or Path.cwd())
         successor._state = _State.OPEN
         successor._active_stream = None
         successor._subscriptions = set()
@@ -1600,9 +1476,9 @@ class Session:
         loaded = await client.load_session(
             session_id=session_id,
             mcp_servers=self._load_mcp_configs or None,
-            additional_tool_ids=_list_or_none(self._load_options["additional_tools"]),
-            enabled_tool_ids=_list_or_none(self._load_options["enabled_tools"]),
-            disabled_tool_ids=_list_or_none(self._load_options["disabled_tools"]),
+            additional_tool_ids=list_or_none(self._load_options["additional_tools"]),
+            enabled_tool_ids=list_or_none(self._load_options["enabled_tools"]),
+            disabled_tool_ids=list_or_none(self._load_options["disabled_tools"]),
             auto_reject_permission_requests=cast(
                 "bool | None",
                 self._load_options["auto_reject_permission_requests"],
@@ -1611,11 +1487,11 @@ class Session:
                 "bool | None",
                 self._load_options["disable_builtin_skills"],
             ),
-            session_source=_wire_source(
+            session_source=wire_source(
                 cast("SessionSource | None", self._load_options["session_source"])
             ),
         )
-        restrict_tools = _list_or_none(self._load_options["restrict_tools"])
+        restrict_tools = list_or_none(self._load_options["restrict_tools"])
         if restrict_tools is not None:
             await client.update_session_settings(
                 restrict_tool_ids=restrict_tools,
@@ -1626,16 +1502,20 @@ class Session:
         client = self._require_client()
 
         def update(raw: dict[str, Any]) -> None:
-            inner = _inner_notification(raw)
+            inner = raw_inner_notification(raw)
             if inner is None:
                 return
             if inner.get("type") == "settings_updated":
-                settings = inner.get("settings")
-                if isinstance(settings, Mapping) and self._settings is not None:
-                    self._settings = _merge_settings(
-                        self._settings,
-                        cast("Mapping[str, object]", settings),
-                    )
+                if self._settings is None:
+                    return
+                try:
+                    notification = SettingsUpdatedNotification.model_validate(inner)
+                except ValidationError:
+                    return
+                self._settings = merged_settings(
+                    self._settings,
+                    notification.settings,
+                )
                 return
             if inner.get("type") == "session_working_directory_changed":
                 cwd = inner.get("cwd")
@@ -1767,231 +1647,9 @@ async def run(
             raise
 
 
-def _list_or_none(value: object) -> list[str] | None:
-    if value is None:
-        return None
-    return sorted(cast("Sequence[str]", value))
-
-
 async def _replacement_handoff_checkpoint() -> None:
     """Give cancellation a deterministic handoff point after replacement."""
     await asyncio.sleep(0)
-
-
-def _consume_task_result(task: asyncio.Future[Any]) -> None:
-    with contextlib.suppress(BaseException):
-        task.result()
-
-
-def _load_cwd(result: Any, fallback: Path) -> Path:
-    extra = cast("dict[str, object]", result.model_extra or {})
-    cwd = extra.get("cwd")
-    if isinstance(cwd, str):
-        return Path(cwd)
-    worktree = extra.get("worktree")
-    if isinstance(worktree, Mapping):
-        typed_worktree = cast("Mapping[str, object]", worktree)
-        path = typed_worktree.get("path")
-        if isinstance(path, str):
-            return Path(path)
-    return fallback
-
-
-def _document_source(document: Document) -> dict[str, Any]:
-    source = document.source
-    if isinstance(source, TextDocumentSource):
-        return {
-            "type": "text",
-            "mediaType": "text/plain",
-            "data": source.data,
-            "name": source.name,
-        }
-    assert isinstance(source, PdfDocumentSource)
-    return {
-        "type": "base64",
-        "mediaType": "application/pdf",
-        "data": source.data,
-        "parsedData": source.parsed_data,
-        "name": source.name,
-        "path": source.path,
-    }
-
-
-def _inner_notification(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    params = cast("object", raw.get("params"))
-    if not isinstance(params, Mapping):
-        return None
-    inner = cast("Mapping[str, object]", params).get("notification")
-    return cast("dict[str, Any]", inner) if isinstance(inner, dict) else None
-
-
-def _header_mapping(values: list[object]) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for value in values:
-        if not isinstance(value, Mapping):
-            continue
-        header = cast("Mapping[str, object]", value)
-        name = header.get("name")
-        content = header.get("value")
-        if isinstance(name, str) and isinstance(content, str):
-            result[name] = content
-    return result
-
-
-def _tool_category(value: str | None) -> ToolCategory:
-    try:
-        return ToolCategory(value)
-    except ValueError:
-        return ToolCategory.OTHER
-
-
-def _merge_settings(
-    current: SessionSettings,
-    update: Mapping[str, object],
-) -> SessionSettings:
-    def enum_value(
-        key: str,
-        enum: type[Enum],
-        fallback: object,
-        *,
-        allow_none: bool = False,
-    ) -> object:
-        value = update.get(key, fallback)
-        if value is fallback:
-            return fallback
-        if value is None and allow_none:
-            return None
-        try:
-            return enum(value)
-        except (TypeError, ValueError):
-            return fallback
-
-    tags: Sequence[SessionTag] = current.tags
-    raw_tags = update.get("tags")
-    if isinstance(raw_tags, list):
-        parsed_tags: list[SessionTag] = []
-        for raw_tag in cast("list[object]", raw_tags):
-            if not isinstance(raw_tag, Mapping):
-                continue
-            tag = cast("Mapping[str, object]", raw_tag)
-            name = tag.get("name")
-            metadata = tag.get("metadata")
-            if isinstance(name, str):
-                parsed_tags.append(
-                    SessionTag(
-                        name=name,
-                        metadata=(
-                            cast("Mapping[str, str]", metadata)
-                            if isinstance(metadata, Mapping)
-                            else None
-                        ),
-                    )
-                )
-        tags = parsed_tags
-
-    def tool_set(key: str, fallback: object) -> object:
-        value = update.get(key, fallback)
-        if isinstance(value, list) and all(
-            isinstance(item, str) for item in cast("list[object]", value)
-        ):
-            return frozenset(cast("list[str]", value))
-        return fallback
-
-    model = update.get("modelId", current.model)
-    spec_model = update.get("specModeModelId", current.spec_model)
-    return SessionSettings(
-        model=model if isinstance(model, str) else current.model,
-        reasoning_effort=cast(
-            "ReasoningEffort",
-            enum_value(
-                "reasoningEffort",
-                ReasoningEffort,
-                current.reasoning_effort,
-            ),
-        ),
-        mode=cast(
-            "Mode | None",
-            enum_value(
-                "interactionMode",
-                Mode,
-                current.mode,
-                allow_none=True,
-            ),
-        ),
-        autonomy=cast(
-            "Autonomy | None",
-            enum_value(
-                "autonomyLevel",
-                Autonomy,
-                current.autonomy,
-                allow_none=True,
-            ),
-        ),
-        spec_model=(
-            spec_model
-            if isinstance(spec_model, str) or spec_model is None
-            else current.spec_model
-        ),
-        spec_reasoning_effort=cast(
-            "ReasoningEffort | None",
-            enum_value(
-                "specModeReasoningEffort",
-                ReasoningEffort,
-                current.spec_reasoning_effort,
-                allow_none=True,
-            ),
-        ),
-        tags=tags,
-        sandbox=current.sandbox,
-        additional_tools=cast(
-            "set[str] | frozenset[str] | None",
-            tool_set("additionalToolIds", current.additional_tools),
-        ),
-        enabled_tools=cast(
-            "set[str] | frozenset[str] | None",
-            tool_set("enabledToolIds", current.enabled_tools),
-        ),
-        disabled_tools=cast(
-            "set[str] | frozenset[str] | None",
-            tool_set("disabledToolIds", current.disabled_tools),
-        ),
-        restrict_tools=cast(
-            "set[str] | frozenset[str] | None",
-            tool_set("restrictToolIds", current.restrict_tools),
-        ),
-    )
-
-
-def _mcp_summary(value: Any) -> McpStatusSummary:
-    return McpStatusSummary(
-        total=value.total,
-        connected=value.connected,
-        connecting=value.connecting,
-        failed=value.failed,
-        disabled=value.disabled,
-        config_error=(
-            None
-            if value.config_error is None
-            else McpConfigError(value.config_error.path, value.config_error.message)
-        ),
-    )
-
-
-def _mcp_server(value: Any) -> McpServerStatusInfo:
-    return McpServerStatusInfo(
-        name=value.name,
-        status=McpServerStatus(value.status.value),
-        source=value.source.value,
-        is_managed=value.is_managed,
-        server_type=McpServerType(value.server_type.value),
-        error=value.error,
-        tool_count=value.tool_count,
-        has_auth_tokens=value.has_auth_tokens,
-        requires_auth=value.requires_auth,
-        pending_auth_url=value.pending_auth_url,
-        pending_auth_message=value.pending_auth_message,
-        pending_auth_state=value.pending_auth_state,
-    )
 
 
 __all__ = ["Session", "run"]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import inspect
 import json
 import math
@@ -14,34 +13,26 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Generic, NoReturn, cast
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar
 
+from droid_sdk._high_level._convert import (
+    inner_notification,
+    mcp_status_from_wire,
+    settings_update_from_wire,
+    usage_from_wire,
+)
 from droid_sdk._high_level._immutable import FrozenJsonObject, freeze_json_object
 from droid_sdk._high_level.attachments import (
     Base64ImageSource,
     PdfDocumentSource,
     TextDocumentSource,
 )
-from droid_sdk._high_level.config import (
-    SessionSettingsUpdate,
-    SessionTag,
-)
 from droid_sdk._high_level.enums import (
-    Autonomy,
     ErrorType,
     McpAuthOutcome,
-    McpServerStatus,
-    McpServerType,
-    Mode,
-    ReasoningEffort,
     ToolConfirmationOutcome,
     WorkingState,
-)
-from droid_sdk._high_level.extensions import (
-    McpConfigError,
-    McpServerStatusInfo,
-    McpStatusSummary,
 )
 from droid_sdk._high_level.messages import (
     AssistantMessage,
@@ -52,7 +43,6 @@ from droid_sdk._high_level.messages import (
     ImageBlock,
     McpAuthCompleted,
     McpAuthRequired,
-    McpStatusChanged,
     Message,
     PermissionResolved,
     RedactedThinkingBlock,
@@ -83,6 +73,7 @@ from droid_sdk._high_level.messages import (
     UserMessage,
     WorkingStateChanged,
 )
+from droid_sdk._util import consume_task_result
 from droid_sdk.errors import DroidProtocolError, StreamIncompleteError
 from droid_sdk.schemas import messages as wire_messages
 from droid_sdk.schemas.cli import (
@@ -98,7 +89,6 @@ from droid_sdk.schemas.cli import (
     McpAuthRequiredNotification,
     McpStatusChangedNotification,
     PermissionResolvedNotification,
-    SessionNotification,
     SessionNotificationUnion,
     SessionTitleUpdatedNotification,
     SessionTokenUsageChangedNotification,
@@ -111,18 +101,14 @@ from droid_sdk.schemas.cli import (
     ToolProgressUpdateNotification,
     ToolResultNotification,
 )
-from droid_sdk.schemas.enums import AgentTurnCompletionReason, SessionNotificationType
+from droid_sdk.schemas.enums import AgentTurnCompletionReason
 
 if TYPE_CHECKING:
     from droid_sdk._high_level.output import OutputAdapter
 
 T = TypeVar("T")
 E = TypeVar("E", bound=object, default=object)
-_NOTIFICATION_ADAPTER: TypeAdapter[SessionNotificationUnion] = TypeAdapter(
-    SessionNotificationUnion
-)
 _RESULT_TYPES = (RunSuccess, RunInterrupted, RunFailure)
-_KNOWN_NOTIFICATION_TYPES = frozenset(item.value for item in SessionNotificationType)
 
 
 def _utc_from_timestamp(value: float) -> datetime:
@@ -231,17 +217,6 @@ def _conversation_message(
     return None
 
 
-def _usage(value: Any) -> Usage:
-    return Usage(
-        input_tokens=value.input_tokens,
-        output_tokens=value.output_tokens,
-        cache_creation_tokens=value.cache_creation_tokens,
-        cache_read_tokens=value.cache_read_tokens,
-        thinking_tokens=value.thinking_tokens,
-        factory_credits=value.factory_credits,
-    )
-
-
 def _tool_progress_update(value: Any) -> ToolProgressUpdate:
     timestamp = (
         None if value.timestamp is None else _utc_from_timestamp(value.timestamp)
@@ -268,104 +243,6 @@ def _tool_progress_content(update: ToolProgressUpdate) -> str:
     if update.status is not None:
         return update.status
     return update.details or ""
-
-
-def _settings(value: Any) -> SessionSettingsUpdate:
-    mode = None
-    if value.interaction_mode is not None and value.interaction_mode.value in {
-        "auto",
-        "spec",
-    }:
-        mode = Mode(value.interaction_mode.value)
-    elif value.autonomy_mode is not None:
-        mode = Mode.SPEC if value.autonomy_mode.value == "spec" else Mode.AUTO
-    autonomy = (
-        None if value.autonomy_level is None else Autonomy(value.autonomy_level.value)
-    )
-    if autonomy is None and value.autonomy_mode is not None:
-        autonomy = {
-            "normal": Autonomy.OFF,
-            "auto-low": Autonomy.LOW,
-            "auto-medium": Autonomy.MEDIUM,
-            "auto-high": Autonomy.HIGH,
-        }.get(value.autonomy_mode.value)
-    return SessionSettingsUpdate(
-        model=value.model_id,
-        reasoning_effort=(
-            None
-            if value.reasoning_effort is None
-            else ReasoningEffort(value.reasoning_effort.value)
-        ),
-        mode=mode,
-        autonomy=autonomy,
-        spec_model=value.spec_mode_model_id,
-        spec_reasoning_effort=(
-            None
-            if value.spec_mode_reasoning_effort is None
-            else ReasoningEffort(value.spec_mode_reasoning_effort.value)
-        ),
-        tags=(
-            None
-            if value.tags is None
-            else tuple(
-                SessionTag(name=tag.name, metadata=tag.metadata) for tag in value.tags
-            )
-        ),
-        additional_tools=(
-            None
-            if value.additional_tool_ids is None
-            else set(value.additional_tool_ids)
-        ),
-        enabled_tools=(
-            None if value.enabled_tool_ids is None else set(value.enabled_tool_ids)
-        ),
-        disabled_tools=(
-            None if value.disabled_tool_ids is None else set(value.disabled_tool_ids)
-        ),
-        restrict_tools=(
-            None if value.restrict_tool_ids is None else set(value.restrict_tool_ids)
-        ),
-        compaction_threshold_check_enabled=value.compaction_threshold_check_enabled,
-    )
-
-
-def _mcp_status(notification: McpStatusChangedNotification) -> McpStatusChanged:
-    servers = tuple(
-        McpServerStatusInfo(
-            name=server.name,
-            status=McpServerStatus(server.status.value),
-            source=server.source.value,
-            is_managed=server.is_managed,
-            server_type=McpServerType(server.server_type.value),
-            error=server.error,
-            tool_count=server.tool_count,
-            has_auth_tokens=server.has_auth_tokens,
-            requires_auth=server.requires_auth,
-            pending_auth_url=server.pending_auth_url,
-            pending_auth_message=server.pending_auth_message,
-            pending_auth_state=server.pending_auth_state,
-        )
-        for server in notification.servers
-    )
-    summary = notification.summary
-    return McpStatusChanged(
-        servers=servers,
-        summary=McpStatusSummary(
-            total=summary.total,
-            connected=summary.connected,
-            connecting=summary.connecting,
-            failed=summary.failed,
-            disabled=summary.disabled,
-            config_error=(
-                None
-                if summary.config_error is None
-                else McpConfigError(
-                    path=summary.config_error.path,
-                    message=summary.config_error.message,
-                )
-            ),
-        ),
-    )
 
 
 def _json_value(value: object) -> object:
@@ -410,50 +287,6 @@ def _javascript_string(value: object) -> str:
     if isinstance(value, Mapping):
         return "[object Object]"
     return str(value)
-
-
-def _notification_type(raw: object) -> str | None:
-    if not isinstance(raw, Mapping):
-        return None
-    payload = cast("Mapping[str, object]", raw)
-    params = payload.get("params")
-    if isinstance(params, Mapping):
-        params_mapping = cast("Mapping[str, object]", params)
-        notification = params_mapping.get("notification")
-        if isinstance(notification, Mapping):
-            payload = cast("Mapping[str, object]", notification)
-    value = payload.get("type")
-    return value if isinstance(value, str) else None
-
-
-def _raise_for_invalid_known_notification(raw: object) -> None:
-    notification_type = _notification_type(raw)
-    if notification_type in _KNOWN_NOTIFICATION_TYPES:
-        raise DroidProtocolError(
-            f"Invalid {notification_type} notification payload"
-        ) from None
-
-
-def _inner_notification(raw: object) -> SessionNotificationUnion | None:
-    raw_object: object = raw
-    if isinstance(raw, SessionNotification):
-        return raw.params.notification
-    if isinstance(raw, Mapping):
-        mapping = cast("Mapping[str, object]", raw)
-        params = mapping.get("params")
-        if isinstance(params, Mapping) and "notification" in params:
-            try:
-                return SessionNotification.model_validate(
-                    raw_object
-                ).params.notification
-            except ValidationError:
-                _raise_for_invalid_known_notification(raw_object)
-                return None
-    try:
-        return _NOTIFICATION_ADAPTER.validate_python(raw_object)
-    except ValidationError:
-        _raise_for_invalid_known_notification(raw_object)
-        return None
 
 
 def _reject_json_constant(value: str) -> NoReturn:
@@ -520,7 +353,7 @@ class StreamStateTracker(Generic[T]):
     def process(self, raw: object) -> tuple[StreamEvent[T], ...]:
         if self._completed:
             return ()
-        notification = _inner_notification(raw)
+        notification = inner_notification(raw)
         if notification is None:
             return ()
 
@@ -654,7 +487,7 @@ class StreamStateTracker(Generic[T]):
                 WorkingStateChanged(state=WorkingState(notification.new_state.value))
             ]
         if isinstance(notification, SessionTokenUsageChangedNotification):
-            usage = _usage(notification.token_usage)
+            usage = usage_from_wire(notification.token_usage)
             return [
                 TokenUsageUpdate(
                     input_tokens=usage.input_tokens,
@@ -699,13 +532,17 @@ class StreamStateTracker(Generic[T]):
                 )
             ]
         if isinstance(notification, SettingsUpdatedNotification):
-            return [SettingsUpdated(settings=_settings(notification.settings))]
+            return [
+                SettingsUpdated(
+                    settings=settings_update_from_wire(notification.settings)
+                )
+            ]
         if isinstance(notification, SessionTitleUpdatedNotification):
             return [SessionTitleUpdated(title=notification.title)]
         if isinstance(notification, SessionWorkingDirectoryChangedNotification):
             return [SessionWorkingDirectoryChanged(cwd=notification.cwd)]
         if isinstance(notification, McpStatusChangedNotification):
-            return [_mcp_status(notification)]
+            return [mcp_status_from_wire(notification)]
         if isinstance(notification, McpAuthRequiredNotification):
             return [
                 McpAuthRequired(
@@ -799,7 +636,11 @@ class StreamStateTracker(Generic[T]):
                 if adapted.structured_output is not None:
                     raw = adapted.structured_output
 
-        usage = _usage(notification.token_usage) if notification.token_usage else None
+        usage = (
+            usage_from_wire(notification.token_usage)
+            if notification.token_usage
+            else None
+        )
         if usage is None:
             usage = self._last_usage
         elapsed = max(0.0, self._monotonic() - self._started_at)
@@ -1107,10 +948,10 @@ class RunStream(Generic[T, E], AsyncIterator[E]):
                     )
             except asyncio.TimeoutError:
                 if task is not None:
-                    task.add_done_callback(_consume_task_result)
+                    task.add_done_callback(consume_task_result)
             except asyncio.CancelledError:
                 if task is not None:
-                    task.add_done_callback(_consume_task_result)
+                    task.add_done_callback(consume_task_result)
                 raise
             except Exception:
                 # Cleanup and best-effort interruption never mask the primary
@@ -1120,11 +961,6 @@ class RunStream(Generic[T, E], AsyncIterator[E]):
     async def aclose(self) -> None:
         """Interrupt and detach this stream if it is unfinished."""
         await self._release(interrupt=not self._done)
-
-
-def _consume_task_result(task: asyncio.Future[object]) -> None:
-    with contextlib.suppress(BaseException):
-        task.result()
 
 
 __all__ = ["RunStream", "StreamStateTracker"]
