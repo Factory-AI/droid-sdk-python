@@ -1,0 +1,107 @@
+src/droid_sdk/_high_level/extensions.py
+  3b6dee923a82df82 190-194
+src/droid_sdk/mcp.py
+  3b6dee923a82df82 16,193,195,201-212,335-336,340-343,345-350,353-364,367,372-373,444-445,473,476-478
+tests/test_v5_mcp.py
+  3b6dee923a82df82 208,210-211,257,284-285
+src/droid_sdk/_high_level/streaming.py
+  3b6dee923a82df82 113-116,951
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "beb21f0744fd7e31bb22c80398377437a46b7a57",
+  "prompts": {
+    "09513296bbcea1b1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "fad8a97a-4c85-43ee-9733-7fbab4686895",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 474,
+      "total_deletions": 101,
+      "accepted_lines": 72,
+      "overriden_lines": 0
+    },
+    "0b5fc118fdc327af": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "8182e164-a245-45e3-beb5-963d53ec9dde",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 68,
+      "total_deletions": 92,
+      "accepted_lines": 28,
+      "overriden_lines": 0
+    },
+    "15f15f971b9e3d1e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "3ee6ef3b-8327-474c-9202-bc9d2b399649",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 1220,
+      "total_deletions": 239,
+      "accepted_lines": 181,
+      "overriden_lines": 0
+    },
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 62,
+      "accepted_lines": 107,
+      "overriden_lines": 0
+    },
+    "49c80188e29e4b82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "959aeb8a-7c3c-430b-aeb3-a0be48230737",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 4209,
+      "total_deletions": 493,
+      "accepted_lines": 320,
+      "overriden_lines": 0
+    },
+    "d14e04a5b0868185": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "c2ae0be4-4ac6-4a46-b120-352d61e785d5",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 2882,
+      "total_deletions": 124,
+      "accepted_lines": 787,
+      "overriden_lines": 0
+    },
+    "d6622bcf29718b8b": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "70a63426-6805-4888-8fab-82d229d15cbf",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 4604,
+      "total_deletions": 1871,
+      "accepted_lines": 574,
+      "overriden_lines": 0
+    }
+  }
+}
