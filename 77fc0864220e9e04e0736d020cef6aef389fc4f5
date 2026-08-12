@@ -1,0 +1,27 @@
+src/droid_sdk/_util.py
+  3b6dee923a82df82 5,7,10,12,19-48
+src/droid_sdk/_high_level/session.py
+  3b6dee923a82df82 117,183-187,1361-1371
+tests/test_v5_session.py
+  3b6dee923a82df82 33,806,808-817
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "77fc0864220e9e04e0736d020cef6aef389fc4f5",
+  "prompts": {
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 35,
+      "accepted_lines": 64,
+      "overriden_lines": 0
+    }
+  }
+}
