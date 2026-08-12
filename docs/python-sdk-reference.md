@@ -1517,12 +1517,16 @@ Entering or leaving Spec mode only changes settings. Plan approval is an
 ### Observability
 
 ```python
-from droid_sdk import Runtime
-from droid_sdk.observability import Observability
+from droid_sdk import Runtime, run
+from droid_sdk.observability import LogEvent, Observability
 
-runtime = Runtime(
-    observability=Observability(logger=logger, metrics=metrics),
-)
+
+class PrintLogger:
+    def log(self, event: LogEvent) -> None:
+        print(event.level, event.name, event.message)
+
+
+runtime = Runtime(observability=Observability(logger=PrintLogger()))
 
 result = await run("Check repository status.", runtime=runtime)
 ```
@@ -1581,7 +1585,8 @@ extend the current process environment when the SDK starts Droid.
 
 ### Low-level API
 
-Applications that own JSON-RPC or transport lifecycle may import:
+Applications that manage the JSON-RPC protocol or the transport themselves
+may import:
 
 ```python
 from droid_sdk.low_level import DroidClient, ProcessTransport
@@ -1605,10 +1610,7 @@ high-level types documented above provide Python naming and lifecycle
 guarantees.
 
 `droid_sdk.low_level.__all__` is the authoritative machine-readable API
-index. It consists of the constants and runtime types shown above plus every
-name in `droid_sdk.schemas.__all__`. This includes Mission wire schemas for
-protocol compatibility; Mission and daemon APIs are not exposed at package
-root.
+index: the types above plus every name in `droid_sdk.schemas.__all__`.
 
 ## API index
 

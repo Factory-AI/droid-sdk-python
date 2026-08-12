@@ -171,9 +171,7 @@ See the complete contract in
 Applications that own JSON-RPC lifecycle can import `DroidClient`,
 `ProcessTransport`, transport protocols, and wire schemas from
 `droid_sdk.low_level`. Legacy query/client/transport/event aliases are not
-exported at package root. Mission and daemon APIs are excluded from the
-package root; Mission wire schemas remain available through
-`droid_sdk.low_level`.
+exported at package root.
 
 ## Limitations
 
