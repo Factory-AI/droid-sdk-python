@@ -1453,24 +1453,33 @@ class Session:
                     rollback_error=rollback,
                 ) from cause
             raise SessionReplacementError(self.id, replacement_id) from cause
+        return self._create_successor(replacement_id, loaded)
 
-        successor = object.__new__(Session)
-        successor.__dict__ = self.__dict__.copy()
+    def _create_successor(self, replacement_id: str, loaded: Any) -> Session:
+        """Build the open session that takes over this session's connection."""
+        successor = Session(
+            model=self._model,
+            reasoning_effort=self._reasoning_effort,
+            config=self._config,
+            interactions=self._interactions,
+            runtime=self._runtime_config,
+            api_key=self._api_key,
+        )
+        successor._requested_cwd = self._requested_cwd
+        successor._resume_id = self._resume_id
+        successor._resume_options = self._resume_options
+        successor._load_options = self._load_options
+        successor._load_mcp_configs = self._load_mcp_configs
+        # The successor adopts the live wiring: the same client, the
+        # dispatcher whose handlers that client dispatches to, and the
+        # in-process MCP servers.
+        successor._dispatcher = self._dispatcher
+        successor._client = self._client
+        successor._sdk_servers = self._sdk_servers
         successor._id = replacement_id
         successor._settings = full_settings_from_wire(loaded.settings)
         successor._cwd = load_cwd(loaded, self._cwd or Path.cwd())
         successor._state = _State.OPEN
-        successor._active_stream = None
-        successor._subscriptions = set()
-        successor._replacement_successor = None
-        successor._lifecycle_lock = asyncio.Lock()
-        successor._open_task = None
-        successor._open_cleanup_task = None
-        successor._open_waiters = 0
-        successor._close_task = None
-        successor._close_requested = False
-        successor._replacement_task = None
-        successor._replacement_close_requested = False
         successor._bind_metadata()
         return successor
 
