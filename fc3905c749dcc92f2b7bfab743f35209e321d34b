@@ -1,0 +1,27 @@
+src/droid_sdk/_high_level/_immutable.py
+  3b6dee923a82df82 8-11,57-62
+src/droid_sdk/_high_level/config.py
+  3b6dee923a82df82 14-18,182-183
+src/droid_sdk/_high_level/messages.py
+  3b6dee923a82df82 144-145,218,275,316,402-412,506
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "fc3905c749dcc92f2b7bfab743f35209e321d34b",
+  "prompts": {
+    "3b6dee923a82df82": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f03646e6-19f3-4b88-9628-83ae86bb450a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 34,
+      "total_deletions": 15,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    }
+  }
+}
