@@ -823,7 +823,7 @@ stream; it is idempotent.
 
 ### Images and files
 
-Message options mirror TypeScript's `images` and `files` fields:
+Attach images and files to a turn with the `images` and `files` options:
 
 ```python
 from droid_sdk import Document, Image, run
@@ -841,7 +841,7 @@ result = await run(
 )
 ```
 
-The constructors produce the same base64 sources the TypeScript SDK accepts.
+The constructors read local data and encode it for the turn.
 Supported image types are PNG, JPEG, GIF, and WebP; image URLs are
 unsupported. Invalid local input raises `InvalidAttachmentError` before the
 turn starts. Attachments are limited to `MAX_ATTACHMENT_BYTES` (5 MiB), and
@@ -904,8 +904,8 @@ elif result.output_validation_error is not None:
 types raise `TypeError` before the turn starts. With `output=Review`, the
 return type is `RunResult[Review]`.
 
-The adapter validates raw structured output when present. Missing or
-Pydantic-invalid output leaves `output` as `None` and populates
+When structured output arrives, the SDK validates it against the model.
+Missing or invalid output leaves `output` as `None` and populates
 `output_validation_error`; it does not change Droid's terminal subtype.
 A successful turn can therefore have `output is None`.
 
@@ -932,8 +932,7 @@ if result.output is not None:
 ```
 
 `JsonSchema` accepts an object-shaped schema. Droid reports unsupported or
-invalid schemas through the normal result subtype; the SDK does not invent a
-separate local terminal state.
+invalid schemas through the normal result subtype.
 
 ### Output contract
 
@@ -943,8 +942,9 @@ separate local terminal state.
 | `type[BaseModel]` | `RunResult[Model]` |
 | `JsonSchema` | `RunResult[JsonObject]` |
 
-`JsonSchema.schema` is `FrozenJsonObject`. Input mappings are validated as
-finite JSON and recursively frozen. Raw schema output remains `JsonObject`.
+`JsonSchema.schema` is `FrozenJsonObject`. Schema mappings must contain only
+JSON-compatible values; the SDK validates this and freezes them recursively.
+Raw schema output remains `JsonObject`.
 
 ```python
 JsonValue = (
