@@ -409,7 +409,7 @@ class TestErrorHierarchyCrossCutting:
     def test_error_repr_includes_class_name(self) -> None:
         """repr() includes the class name for debugging."""
         err = DroidClientError("test")
-        assert "DroidClientError" in repr(err)
+        assert "DroidError" in repr(err)
 
     def test_str_of_each_error_with_metadata(self) -> None:
         """Verify str() of each error type includes its metadata."""

@@ -73,7 +73,7 @@ def _make_init_response(request_id: str) -> dict[str, Any]:
         request_id=request_id,
         result={
             "sessionId": "test-session",
-            "session": {"id": "test-session"},
+            "session": {"id": "test-session", "messages": []},
             "settings": {
                 "modelId": "claude-sonnet-4",
                 "reasoningEffort": "medium",
@@ -330,7 +330,7 @@ class TestQueryOptionsPassthrough:
                     autonomy_level=AutonomyLevel.High,
                     reasoning_effort=ReasoningEffort.Medium,
                     interaction_mode=DroidInteractionMode.Auto,
-                    mcp_servers=[{"name": "test", "type": "stdio"}],
+                    mcp_servers=[{"name": "test", "command": "server"}],
                     enabled_tool_ids=["tool1"],
                 ),
             ):
@@ -345,7 +345,9 @@ class TestQueryOptionsPassthrough:
         assert params["autonomyLevel"] == "high"
         assert params["reasoningEffort"] == "medium"
         assert params["interactionMode"] == "auto"
-        assert params["mcpServers"] == [{"name": "test", "type": "stdio"}]
+        assert params["mcpServers"] == [
+            {"name": "test", "command": "server", "args": [], "env": {}}
+        ]
         assert params["enabledToolIds"] == ["tool1"]
 
     @pytest.mark.asyncio

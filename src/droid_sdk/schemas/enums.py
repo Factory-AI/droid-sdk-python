@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from enum import Enum
 
-__all__ = [
+__all__ = [  # noqa: RUF022
+    "AgentTurnCompletionReason",
     "AutonomyLevel",
     # AutonomyMode intentionally excluded — deprecated in favor of
     # DroidInteractionMode + AutonomyLevel.  Kept for protocol compat only.
     "ClientType",
+    "ContextStatsAccuracy",
     "DecompSessionType",
     "DismissalType",
     "DroidClientMethod",
@@ -30,7 +32,9 @@ __all__ = [
     "IssueSeverity",
     "JsonRpcErrorCode",
     "JsonRpcMessageType",
+    "LlmRetryReason",
     "McpAuthOutcome",
+    "McpOAuthTokenEndpointAuthMethod",
     "McpServerStatus",
     "McpServerType",
     "McpStatus",
@@ -39,11 +43,17 @@ __all__ = [
     "Platform",
     "ProgressLogEntryType",
     "ReasoningEffort",
+    "SandboxMode",
+    "SandboxOperationType",
+    "SandboxViolationReason",
+    "SandboxViolationType",
+    "SessionPlatform",
     "SessionNotificationType",
     "SettingsLevel",
     "SkillLocation",
     "ToolConfirmationOutcome",
     "ToolConfirmationType",
+    "ToolExecutionLifecyclePhase",
 ]
 
 
@@ -67,7 +77,9 @@ class DroidServerMethod(str, Enum):
     LIST_MCP_SERVERS = "droid.list_mcp_servers"
     TOGGLE_MCP_TOOL = "droid.toggle_mcp_tool"
     SUBMIT_MCP_AUTH_CODE = "droid.submit_mcp_auth_code"
+    SUBMIT_MCP_AUTH_ERROR = "droid.submit_mcp_auth_error"
     LIST_SKILLS = "droid.list_skills"
+    SET_SKILL_DISABLED = "droid.set_skill_disabled"
     SUBMIT_BUG_REPORT = "droid.submit_bug_report"
     LIST_TOOLS = "droid.list_tools"
     LIST_COMMANDS = "droid.list_commands"
@@ -97,13 +109,21 @@ class SessionNotificationType(str, Enum):
     CREATE_MESSAGE = "create_message"
     ERROR = "error"
     DROID_WORKING_STATE_CHANGED = "droid_working_state_changed"
+    SESSION_COMPACTED = "session_compacted"
+    LOOP_STATE_CHANGED = "loop_state_changed"
     PERMISSION_RESOLVED = "permission_resolved"
     SETTINGS_UPDATED = "settings_updated"
     SESSION_TITLE_UPDATED = "session_title_updated"
+    SESSION_WORKING_DIRECTORY_CHANGED = "session_working_directory_changed"
+    CHILD_SESSION_AVAILABLE = "child_session_available"
     MCP_STATUS_CHANGED = "mcp_status_changed"
     ASSISTANT_TEXT_DELTA = "assistant_text_delta"
+    ASSISTANT_TEXT_COMPLETE = "assistant_text_complete"
+    STRUCTURED_OUTPUT = "structured_output"
     THINKING_TEXT_DELTA = "thinking_text_delta"
+    THINKING_TEXT_COMPLETE = "thinking_text_complete"
     SESSION_TOKEN_USAGE_CHANGED = "session_token_usage_changed"
+    AGENT_TURN_COMPLETED = "agent_turn_completed"
     MISSION_STATE_CHANGED = "mission_state_changed"
     MISSION_FEATURES_CHANGED = "mission_features_changed"
     MISSION_PROGRESS_ENTRY = "mission_progress_entry"
@@ -112,6 +132,13 @@ class SessionNotificationType(str, Enum):
     MISSION_WORKER_COMPLETED = "mission_worker_completed"
     MCP_AUTH_REQUIRED = "mcp_auth_required"
     MCP_AUTH_COMPLETED = "mcp_auth_completed"
+    HOOK_EXECUTION_STARTED = "hook_execution_started"
+    HOOK_EXECUTION_COMPLETED = "hook_execution_completed"
+    TOOL_CALL = "tool_call"
+    QUEUED_MESSAGES_DISCARDED = "queued_messages_discarded"
+    TOOL_EXECUTION_HEARTBEAT = "tool_execution_heartbeat"
+    LLM_RETRY = "llm_retry"
+    TOOL_EXECUTION_PHASE_CHANGED = "tool_execution_phase_changed"
 
 
 class ToolConfirmationOutcome(str, Enum):
@@ -122,11 +149,18 @@ class ToolConfirmationOutcome(str, Enum):
 
     ProceedOnce = "proceed_once"
     ProceedAlways = "proceed_always"
+    ProceedAlwaysForExactPath = "proceed_always_file"
     ProceedAutoRun = "proceed_auto_run"
     ProceedAutoRunLow = "proceed_auto_run_low"
     ProceedAutoRunMedium = "proceed_auto_run_medium"
     ProceedAutoRunHigh = "proceed_auto_run_high"
+    ProceedNewSession = "proceed_new_session"
+    ProceedNewSessionLow = "proceed_new_session_low"
+    ProceedNewSessionMedium = "proceed_new_session_medium"
+    ProceedNewSessionHigh = "proceed_new_session_high"
     ProceedEdit = "proceed_edit"
+    ProceedAlwaysTools = "proceed_always_tools"
+    ProceedAlwaysServer = "proceed_always_server"
     Cancel = "cancel"
 
 
@@ -142,12 +176,47 @@ class ToolConfirmationType(str, Enum):
     StartMissionRun = "start_mission_run"
     ApplyPatch = "apply_patch"
     McpTool = "mcp_tool"
+    SandboxViolation = "sandbox_violation"
+    DroidShieldViolation = "droid_shield_violation"
+
+
+class SandboxViolationType(str, Enum):
+    """Kind of access blocked by the sandbox."""
+
+    FilesystemRead = "filesystem-read"
+    FilesystemWrite = "filesystem-write"
+    Network = "network"
+    Tool = "tool"
+
+
+class SandboxViolationReason(str, Enum):
+    """Reason sandbox access was denied."""
+
+    DenyList = "deny-list"
+    NotAllowed = "not-allowed"
+
+
+class SandboxOperationType(str, Enum):
+    """Operation attempted by a sandboxed tool."""
+
+    Read = "read"
+    Write = "write"
+    Network = "network"
+    Tool = "tool"
+
+
+class SandboxMode(str, Enum):
+    """Sandbox execution mode."""
+
+    PerCommand = "per-command"
+    WholeProcess = "whole-process"
 
 
 class DroidWorkingState(str, Enum):
     """Droid working state (represents what the agent is currently doing)."""
 
     Idle = "idle"
+    Thinking = "thinking"
     StreamingAssistantMessage = "streaming_assistant_message"
     WaitingForToolConfirmation = "waiting_for_tool_confirmation"
     ExecutingTool = "executing_tool"
@@ -181,6 +250,40 @@ class McpServerType(str, Enum):
 
     Stdio = "stdio"
     Http = "http"
+    Sse = "sse"
+
+
+class AgentTurnCompletionReason(str, Enum):
+    """Canonical terminal reasons for an agent turn."""
+
+    Completed = "completed"
+    Cancelled = "cancelled"
+    PermissionRejected = "permission_rejected"
+    Error = "error"
+    ProcessExit = "process_exit"
+    SpecHandoff = "spec_handoff"
+    StructuredOutputMissing = "structured_output_missing"
+    StructuredOutputInvalid = "structured_output_invalid"
+    StructuredOutputSchemaInvalid = "structured_output_schema_invalid"
+    ModelUsageExhausted = "model_usage_exhausted"
+    ModelAuthenticationFailed = "model_authentication_failed"
+    ModelRequestRejected = "model_request_rejected"
+    ModelProviderUnreachable = "model_provider_unreachable"
+    ModelProviderUnavailable = "model_provider_unavailable"
+    PromptRejected = "prompt_rejected"
+    CompletionPersistenceFailed = "completion_persistence_failed"
+    NoApproverAvailable = "no_approver_available"
+
+
+class ToolExecutionLifecyclePhase(str, Enum):
+    """Objective lifecycle phase for a tool call."""
+
+    StreamingInput = "streaming_input"
+    Queued = "queued"
+    Executing = "executing"
+    SettledAfterExecution = "settled_after_execution"
+    SettledWithoutExecution = "settled_without_execution"
+    SettledUnknown = "settled_unknown"
 
 
 class McpStatus(str, Enum):
@@ -199,6 +302,53 @@ class McpAuthOutcome(str, Enum):
     Success = "success"
     Cancelled = "cancelled"
     Failed = "failed"
+
+
+class McpOAuthTokenEndpointAuthMethod(str, Enum):
+    """OAuth client authentication method used at the token endpoint."""
+
+    None_ = "none"
+    ClientSecretBasic = "client_secret_basic"
+    ClientSecretPost = "client_secret_post"
+
+
+class LlmRetryReason(str, Enum):
+    """Coarse, content-free reason for retrying an LLM request."""
+
+    Overloaded = "overloaded"
+    RateLimited = "rate_limited"
+    Timeout = "timeout"
+    Network = "network"
+    EmptyResponse = "empty_response"
+    Unknown = "unknown"
+
+
+class ContextStatsAccuracy(str, Enum):
+    """Accuracy of the current context-window measurement."""
+
+    Exact = "exact"
+    Estimated = "estimated"
+
+
+class SessionPlatform(str, Enum):
+    """Authority-recognized origin platform for a session."""
+
+    Slack = "slack"
+    Web = "web"
+    Api = "api"
+    SessionsApi = "sessions_api"
+    Jira = "jira"
+    Linear = "linear"
+    MicrosoftTeams = "microsoft-teams"
+    ReadinessRemediation = "readiness-remediation"
+    ReadinessEvaluation = "readiness-evaluation"
+    Automation = "automation"
+    WikiGeneration = "wiki-generation"
+    WikiCISetup = "wiki-ci-setup"
+    Tui = "tui"
+    Desktop = "desktop"
+    Acp = "acp"
+    Unknown = "unknown"
 
 
 class DecompSessionType(str, Enum):
@@ -428,3 +578,4 @@ class SkillLocation(str, Enum):
     Project = "project"
     Personal = "personal"
     Builtin = "builtin"
+    Automation = "automation"

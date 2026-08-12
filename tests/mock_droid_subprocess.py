@@ -123,6 +123,7 @@ def init_session_result(session_id: str = "test-session-1") -> dict:  # type: ig
             "id": session_id,
             "createdAt": "2025-01-01T00:00:00Z",
             "settings": {},
+            "messages": [],
         },
         "settings": {
             "modelId": "test-model",
@@ -138,6 +139,7 @@ def load_session_result(session_id: str = "test-session-1") -> dict:  # type: ig
             "id": session_id,
             "createdAt": "2025-01-01T00:00:00Z",
             "settings": {},
+            "messages": [],
         },
         "settings": {
             "modelId": "test-model",

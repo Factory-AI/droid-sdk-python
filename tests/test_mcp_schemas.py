@@ -204,6 +204,7 @@ class TestMcpServerStatusInfo:
             status=McpServerStatus.Connected,
             source=SettingsLevel.User,
             is_managed=True,
+            server_type=McpServerType.Stdio,
         )
         assert info.name == "my-server"
         assert info.status == McpServerStatus.Connected
@@ -211,7 +212,7 @@ class TestMcpServerStatusInfo:
         assert info.is_managed is True
         assert info.error is None
         assert info.tool_count is None
-        assert info.server_type is None
+        assert info.server_type == McpServerType.Stdio
         assert info.has_auth_tokens is None
 
     def test_construction_all_fields(self) -> None:
@@ -272,6 +273,7 @@ class TestMcpServerStatusInfo:
             status=McpServerStatus.Connecting,
             source=SettingsLevel.Runtime,
             is_managed=False,
+            server_type=McpServerType.Stdio,
             tool_count=0,
         )
         roundtripped = McpServerStatusInfo.model_validate_json(
@@ -287,6 +289,7 @@ class TestMcpServerStatusInfo:
                 "status": "connected",
                 "source": "user",
                 "isManaged": True,
+                "serverType": "stdio",
                 "unknown": "tolerated",
             }
         )
@@ -637,6 +640,7 @@ class TestMcpCrossModelBehavior:
             status=McpServerStatus.Disabled,
             source=SettingsLevel.Org,
             is_managed=False,
+            server_type=McpServerType.Stdio,
         )
         data = json.loads(info.model_dump_json(by_alias=True))
         assert data["status"] == "disabled"

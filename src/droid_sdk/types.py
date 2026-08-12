@@ -63,7 +63,7 @@ class DroidClientTransport(Protocol):
             Parsed JSON-RPC message dicts.
 
         Raises:
-            ProcessExitError: If the underlying process exited abnormally.
+            DroidProcessError: If the underlying process exits.
         """
         ...
 

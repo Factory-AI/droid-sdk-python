@@ -1,3 +1,5 @@
+# pyright: reportIncompatibleVariableOverride=false
+
 """Server→client CLI schemas (notifications, permission requests, ask-user).
 
 Ported from TypeScript source:
@@ -14,23 +16,28 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
-# Re-use TokenUsage from client module
-from droid_sdk.schemas.client import TokenUsage  # noqa: TC001
-from droid_sdk.schemas.enums import (  # noqa: TC001
+from droid_sdk.schemas.enums import (
+    AgentTurnCompletionReason,
     AutonomyLevel,
     AutonomyMode,
     DroidClientMethod,
     DroidErrorType,
     DroidInteractionMode,
     DroidWorkingState,
+    LlmRetryReason,
     McpAuthOutcome,
     MissionState,
     ReasoningEffort,
+    SandboxMode,
+    SandboxOperationType,
+    SandboxViolationReason,
+    SandboxViolationType,
     SessionNotificationType,
     ToolConfirmationOutcome,
     ToolConfirmationType,
+    ToolExecutionLifecyclePhase,
 )
 from droid_sdk.schemas.mcp import (  # noqa: TC001
     McpServerStatusInfo,
@@ -42,12 +49,18 @@ from droid_sdk.schemas.mission import (  # noqa: TC001
     MissionFeature,
     ProgressLogEntry,
 )
+from droid_sdk.schemas.session import (  # noqa: TC001
+    LastCallTokenUsage,
+    SessionTag,
+    TokenUsage,
+)
 from droid_sdk.schemas.shared import (
     JsonRpcNotification,
     JsonRpcRequest,
 )
 
 __all__ = [
+    "AgentTurnCompletedNotification",
     "ApplyPatchToolConfirmationDetails",
     "AskUserCollectedAnswer",
     "AskUserConfirmationDetails",
@@ -57,10 +70,13 @@ __all__ = [
     "AskUserRequest",
     "AskUserRequestParams",
     "AskUserResult",
+    "AssistantTextCompleteNotification",
     "AssistantTextDeltaNotification",
+    "ChildSessionAvailableNotification",
     "CliRequestOrNotification",
     "CreateMessageNotification",
     "CreateToolConfirmationDetails",
+    "DroidShieldViolationConfirmationDetails",
     "DroidWorkingStateChangedNotification",
     "EditToolConfirmationDetails",
     "ErrorDetail",
@@ -68,6 +84,11 @@ __all__ = [
     "ExecuteToolConfirmationDetails",
     "ExitSpecModeConfirmationDetails",
     "FactoryDroidMessage",
+    "HookCommand",
+    "HookExecutionCompletedNotification",
+    "HookExecutionStartedNotification",
+    "HookResult",
+    "LoopStateChangedNotification",
     "McpAuthCompletedNotification",
     "McpAuthRequiredNotification",
     "McpStatusChangedNotification",
@@ -80,19 +101,29 @@ __all__ = [
     "MissionWorkerStartedNotification",
     "PermissionResolvedNotification",
     "ProposeMissionConfirmationDetails",
+    "QueuedMessagesDiscardedNotification",
     "RequestPermissionRequest",
     "RequestPermissionRequestParams",
     "RequestPermissionResult",
+    "SandboxStatus",
+    "SandboxViolationConfirmationDetails",
+    "SessionCompactedNotification",
     "SessionNotification",
     "SessionNotificationParams",
     "SessionTitleUpdatedNotification",
     "SessionTokenUsageChangedNotification",
+    "SessionWorkingDirectoryChangedNotification",
     "SettingsUpdatedNotification",
     "SettingsUpdatedPayload",
     "StartMissionRunConfirmationDetails",
+    "StructuredOutputNotification",
+    "ThinkingTextCompleteNotification",
     "ThinkingTextDeltaNotification",
+    "ToolCallNotification",
     "ToolConfirmationDetails",
     "ToolConfirmationInfo",
+    "ToolExecutionHeartbeatNotification",
+    "ToolExecutionPhaseChangedNotification",
     "ToolProgressUpdate",
     "ToolProgressUpdateNotification",
     "ToolResultNotification",
@@ -173,6 +204,9 @@ class ToolProgressUpdate(BaseModel):
     subagent_session_id: str | None = Field(default=None, alias="subagentSessionId")
     """Optional spawned subagent session ID."""
 
+    terminal_id: str | None = Field(default=None, alias="terminalId")
+    full_output: str | None = Field(default=None, alias="fullOutput")
+
 
 class SettingsUpdatedPayload(BaseModel):
     """Settings payload within SettingsUpdatedNotification."""
@@ -205,6 +239,17 @@ class SettingsUpdatedPayload(BaseModel):
         default=None, alias="specModeReasoningEffort"
     )
     """Optional spec mode reasoning effort override."""
+
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    restrict_tool_ids: list[str] | None = Field(default=None, alias="restrictToolIds")
+    tags: list[SessionTag] | None = None
+    compaction_threshold_check_enabled: bool | None = Field(
+        default=None, alias="compactionThresholdCheckEnabled"
+    )
 
 
 # ============================================================
@@ -309,6 +354,26 @@ class DroidWorkingStateChangedNotification(BaseModel):
     """New working state."""
 
 
+class SessionCompactedNotification(BaseModel):
+    """Conversation compaction boundary update."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.SESSION_COMPACTED]
+    summary_id: str = Field(alias="summaryId")
+    removed_count: int = Field(alias="removedCount", ge=0)
+    visible_boundary_message_id: str | None = Field(alias="visibleBoundaryMessageId")
+
+
+class LoopStateChangedNotification(BaseModel):
+    """Deprecated loop-state update retained for wire compatibility."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.LOOP_STATE_CHANGED]
+    loop_state: dict[str, Any] = Field(alias="loopState")
+
+
 class PermissionResolvedNotification(BaseModel):
     """Permission resolved notification."""
 
@@ -335,6 +400,7 @@ class SettingsUpdatedNotification(BaseModel):
     type: Literal[SessionNotificationType.SETTINGS_UPDATED]
     """Notification type discriminator."""
 
+    request_id: str | None = Field(default=None, alias="requestId")
     settings: SettingsUpdatedPayload
     """Updated settings."""
 
@@ -347,8 +413,31 @@ class SessionTitleUpdatedNotification(BaseModel):
     type: Literal[SessionNotificationType.SESSION_TITLE_UPDATED]
     """Notification type discriminator."""
 
+    request_id: str | None = Field(default=None, alias="requestId")
     title: str
     """New session title."""
+
+
+class SessionWorkingDirectoryChangedNotification(BaseModel):
+    """Working-directory update."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.SESSION_WORKING_DIRECTORY_CHANGED]
+    cwd: str
+
+
+class ChildSessionAvailableNotification(BaseModel):
+    """Notification that a delegated child session is available."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.CHILD_SESSION_AVAILABLE]
+    child_session_id: str = Field(alias="childSessionId")
+    tool_use_id: str | None = Field(default=None, alias="toolUseId")
+    subagent_type: str | None = Field(default=None, alias="subagentType")
+    description: str | None = None
+    timestamp: float
 
 
 class McpStatusChangedNotification(BaseModel):
@@ -384,6 +473,26 @@ class AssistantTextDeltaNotification(BaseModel):
     """Text delta content."""
 
 
+class AssistantTextCompleteNotification(BaseModel):
+    """Marks completion of a streamed assistant text block."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.ASSISTANT_TEXT_COMPLETE]
+    message_id: str = Field(alias="messageId")
+    block_index: int = Field(alias="blockIndex")
+
+
+class StructuredOutputNotification(BaseModel):
+    """Structured output produced for a message."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.STRUCTURED_OUTPUT]
+    message_id: str = Field(alias="messageId")
+    structured_output: dict[str, Any] | None = Field(alias="structuredOutput")
+
+
 class ThinkingTextDeltaNotification(BaseModel):
     """Thinking text delta notification (streaming thinking token)."""
 
@@ -402,6 +511,17 @@ class ThinkingTextDeltaNotification(BaseModel):
     """Text delta content."""
 
 
+class ThinkingTextCompleteNotification(BaseModel):
+    """Marks completion of a streamed thinking block."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.THINKING_TEXT_COMPLETE]
+    message_id: str = Field(alias="messageId")
+    block_index: int = Field(alias="blockIndex")
+    duration_ms: float | None = Field(default=None, alias="durationMs", ge=0)
+
+
 class SessionTokenUsageChangedNotification(BaseModel):
     """Session token usage changed notification."""
 
@@ -416,6 +536,32 @@ class SessionTokenUsageChangedNotification(BaseModel):
     token_usage: TokenUsage = Field(alias="tokenUsage")
     """Updated token usage."""
 
+    inclusive_token_usage: TokenUsage | None = Field(
+        default=None, alias="inclusiveTokenUsage"
+    )
+    last_call_token_usage: LastCallTokenUsage | None = Field(
+        default=None, alias="lastCallTokenUsage"
+    )
+
+
+class AgentTurnCompletedNotification(BaseModel):
+    """Terminal notification for an agent turn."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.AGENT_TURN_COMPLETED]
+    reason: AgentTurnCompletionReason
+    turn_id: str | None = Field(default=None, alias="turnId")
+    token_usage: TokenUsage = Field(alias="tokenUsage")
+    cumulative_token_usage: TokenUsage | None = Field(
+        default=None, alias="cumulativeTokenUsage"
+    )
+    child_token_usage: TokenUsage | None = Field(default=None, alias="childTokenUsage")
+    cumulative_child_token_usage: TokenUsage | None = Field(
+        default=None, alias="cumulativeChildTokenUsage"
+    )
+    duration_ms: float | None = Field(default=None, alias="durationMs", ge=0)
+
 
 class MissionStateChangedNotification(BaseModel):
     """Mission state changed notification."""
@@ -427,6 +573,8 @@ class MissionStateChangedNotification(BaseModel):
 
     state: MissionState
     """New mission state."""
+
+    updated_at: str | None = Field(default=None, alias="updatedAt")
 
 
 class MissionFeaturesChangedNotification(BaseModel):
@@ -531,6 +679,131 @@ class McpAuthCompletedNotification(BaseModel):
     """Authentication result message."""
 
 
+class HookCommand(BaseModel):
+    """Command configured for a hook."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    command: str
+    timeout: float | None = None
+
+
+class HookResult(BaseModel):
+    """Result of a hook command."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    exit_code: int = Field(alias="exitCode")
+    stdout: str
+    stderr: str
+    command: str | None = None
+    timeout: float | None = None
+    suppress_output: bool | None = Field(default=None, alias="suppressOutput")
+
+
+class HookExecutionStartedNotification(BaseModel):
+    """Hook execution began."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.HOOK_EXECUTION_STARTED]
+    hook_id: str = Field(alias="hookId")
+    hook_event_name: str = Field(alias="hookEventName")
+    hook_matcher: str | None = Field(default=None, alias="hookMatcher")
+    hook_commands: list[HookCommand] = Field(alias="hookCommands")
+    hook_tool_call_id: str | None = Field(default=None, alias="hookToolCallId")
+    hook_parent_id: str | None = Field(default=None, alias="hookParentId")
+    hook_order: int | None = Field(default=None, alias="hookOrder")
+    hidden_from_user_views: bool | None = Field(
+        default=None, alias="hiddenFromUserViews"
+    )
+    is_parallel_execution: bool | None = Field(
+        default=None, alias="isParallelExecution"
+    )
+    parallel_group_id: str | None = Field(default=None, alias="parallelGroupId")
+
+
+class HookExecutionCompletedNotification(BaseModel):
+    """Hook execution completed."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.HOOK_EXECUTION_COMPLETED]
+    hook_id: str = Field(alias="hookId")
+    hook_event_name: str | None = Field(default=None, alias="hookEventName")
+    hook_matcher: str | None = Field(default=None, alias="hookMatcher")
+    hook_tool_call_id: str | None = Field(default=None, alias="hookToolCallId")
+    hook_parent_id: str | None = Field(default=None, alias="hookParentId")
+    hook_order: int | None = Field(default=None, alias="hookOrder")
+    hook_prevented_action: bool | None = Field(
+        default=None, alias="hookPreventedAction"
+    )
+    hidden_from_user_views: bool | None = Field(
+        default=None, alias="hiddenFromUserViews"
+    )
+    hook_status: Literal["completed", "error"] = Field(alias="hookStatus")
+    hook_results: list[HookResult] | None = Field(default=None, alias="hookResults")
+
+
+class ToolCallNotification(BaseModel):
+    """Completed tool-call input notification."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.TOOL_CALL]
+    tool_use: ToolUse = Field(alias="toolUse")
+
+
+class QueuedMessagesDiscardedNotification(BaseModel):
+    """Queued messages were discarded."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.QUEUED_MESSAGES_DISCARDED]
+    text: str
+    request_id: str | None = Field(default=None, alias="requestId")
+
+
+class ToolExecutionHeartbeatNotification(BaseModel):
+    """Internal heartbeat for a long-running tool."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.TOOL_EXECUTION_HEARTBEAT]
+    tool_use_id: str = Field(alias="toolUseId")
+    tool_name: str = Field(alias="toolName")
+
+
+class ToolExecutionPhaseChangedNotification(BaseModel):
+    """Tool execution lifecycle update."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.TOOL_EXECUTION_PHASE_CHANGED]
+    tool_use_id: str = Field(alias="toolUseId")
+    tool_name: str = Field(alias="toolName")
+    phase: ToolExecutionLifecyclePhase
+
+
+class LlmRetryNotification(BaseModel):
+    """Coarse LLM retry status."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[SessionNotificationType.LLM_RETRY]
+    attempt: int
+    reason: LlmRetryReason
+
+
+class SandboxStatus(BaseModel):
+    """Current sandbox status."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    enabled: bool
+    mode: SandboxMode | None = None
+
+
 # ============================================================
 # SessionNotification discriminated union
 # ============================================================
@@ -541,13 +814,21 @@ SessionNotificationUnion = Annotated[
     | CreateMessageNotification
     | ErrorNotification
     | DroidWorkingStateChangedNotification
+    | SessionCompactedNotification
+    | LoopStateChangedNotification
     | PermissionResolvedNotification
     | SettingsUpdatedNotification
     | SessionTitleUpdatedNotification
+    | SessionWorkingDirectoryChangedNotification
+    | ChildSessionAvailableNotification
     | McpStatusChangedNotification
     | AssistantTextDeltaNotification
+    | AssistantTextCompleteNotification
+    | StructuredOutputNotification
     | ThinkingTextDeltaNotification
+    | ThinkingTextCompleteNotification
     | SessionTokenUsageChangedNotification
+    | AgentTurnCompletedNotification
     | MissionStateChangedNotification
     | MissionFeaturesChangedNotification
     | MissionProgressEntryNotification
@@ -555,7 +836,14 @@ SessionNotificationUnion = Annotated[
     | MissionWorkerStartedNotification
     | MissionWorkerCompletedNotification
     | McpAuthRequiredNotification
-    | McpAuthCompletedNotification,
+    | McpAuthCompletedNotification
+    | HookExecutionStartedNotification
+    | HookExecutionCompletedNotification
+    | ToolCallNotification
+    | QueuedMessagesDiscardedNotification
+    | ToolExecutionHeartbeatNotification
+    | ToolExecutionPhaseChangedNotification
+    | LlmRetryNotification,
     Field(discriminator="type"),
 ]
 
@@ -567,6 +855,8 @@ class SessionNotificationParams(BaseModel):
 
     notification: SessionNotificationUnion
     """Discriminated notification payload."""
+
+    session_id: str | None = Field(default=None, alias="sessionId")
 
 
 class SessionNotification(JsonRpcNotification):
@@ -631,6 +921,8 @@ class ExecuteToolConfirmationDetails(BaseModel):
 
     impact_level: str | None = Field(default=None, alias="impactLevel")
     """Optional impact level assessment."""
+
+    risk_level_reason: str | None = Field(default=None, alias="riskLevelReason")
 
 
 class CreateToolConfirmationDetails(BaseModel):
@@ -763,6 +1055,8 @@ class ApplyPatchToolConfirmationDetails(BaseModel):
     new_content: str | None = Field(default=None, alias="newContent")
     """Optional new content."""
 
+    files: list[dict[str, Any]] | None = None
+
 
 class McpToolConfirmationDetails(BaseModel):
     """MCP tool confirmation details."""
@@ -778,6 +1072,36 @@ class McpToolConfirmationDetails(BaseModel):
     impact_level: str = Field(alias="impactLevel")
     """Impact level assessment."""
 
+    server_name: str | None = Field(default=None, alias="serverName")
+    actual_tool_name: str | None = Field(default=None, alias="actualToolName")
+
+
+class SandboxViolationConfirmationDetails(BaseModel):
+    """Sandbox policy violation confirmation details."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[ToolConfirmationType.SandboxViolation]
+    violating_tool_name: str = Field(alias="violatingToolName")
+    target: str
+    operation_type: SandboxOperationType = Field(alias="operationType")
+    violation_type: SandboxViolationType = Field(alias="violationType")
+    reason: str
+    violation_reason: SandboxViolationReason | None = Field(
+        default=None, alias="violationReason"
+    )
+    is_org_deny: bool = Field(alias="isOrgDeny")
+
+
+class DroidShieldViolationConfirmationDetails(BaseModel):
+    """DroidShield command-policy violation details."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: Literal[ToolConfirmationType.DroidShieldViolation]
+    command: str
+    reason: str
+
 
 ToolConfirmationDetailsUnion = Annotated[
     EditToolConfirmationDetails
@@ -788,7 +1112,9 @@ ToolConfirmationDetailsUnion = Annotated[
     | ProposeMissionConfirmationDetails
     | StartMissionRunConfirmationDetails
     | ApplyPatchToolConfirmationDetails
-    | McpToolConfirmationDetails,
+    | McpToolConfirmationDetails
+    | SandboxViolationConfirmationDetails
+    | DroidShieldViolationConfirmationDetails,
     Field(discriminator="type"),
 ]
 
@@ -831,6 +1157,10 @@ class RequestPermissionRequestParams(BaseModel):
     options: list[ToolConfirmationListItem]
     """Available permission options."""
 
+    associated_session_ids: list[str] | None = Field(
+        default=None, alias="associatedSessionIds"
+    )
+
 
 class RequestPermissionRequest(JsonRpcRequest):
     """Request for permission from the server (server→client)."""
@@ -851,6 +1181,21 @@ class RequestPermissionResult(BaseModel):
 
     selected_option: ToolConfirmationOutcome = Field(alias="selectedOption")
     """Selected permission outcome."""
+
+    comment: str | None = None
+    edited_spec_content: str | None = Field(default=None, alias="editedSpecContent")
+
+    @model_validator(mode="after")
+    def require_edited_spec_content(self) -> RequestPermissionResult:
+        """Require edited content for the proceed-edit outcome."""
+        if (
+            self.selected_option == ToolConfirmationOutcome.ProceedEdit
+            and self.edited_spec_content is None
+        ):
+            raise ValueError(
+                "editedSpecContent is required when selectedOption is proceed_edit"
+            )
+        return self
 
 
 # ============================================================
@@ -874,6 +1219,8 @@ class AskUserQuestion(BaseModel):
 
     options: list[str]
     """Available options."""
+
+    multi_select: bool | None = Field(default=None, alias="multiSelect")
 
 
 class AskUserRequestParams(BaseModel):

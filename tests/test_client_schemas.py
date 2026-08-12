@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from droid_sdk.schemas.client import (
     AddMcpServerRequest,
@@ -88,6 +88,7 @@ from droid_sdk.schemas.enums import (
     SettingsLevel,
     SkillLocation,
 )
+from droid_sdk.schemas.messages import Base64PDFSource, PlainTextSource
 from droid_sdk.schemas.shared import (
     JsonRpcResponseFailure,
 )
@@ -163,23 +164,23 @@ class TestDocumentSource:
     """Tests for DocumentSource."""
 
     def test_pdf_source(self) -> None:
-        doc = DocumentSource(
+        doc = Base64PDFSource(
             type="base64", media_type="application/pdf", data="base64data"
         )
         assert doc.type == "base64"
         assert doc.media_type == "application/pdf"
 
     def test_text_source(self) -> None:
-        doc = DocumentSource(
+        doc = PlainTextSource(
             type="text", media_type="text/plain", data="hello", name="test.txt"
         )
         assert doc.name == "test.txt"
 
     def test_camel_case_roundtrip(self) -> None:
-        doc = DocumentSource(type="base64", media_type="application/pdf", data="xyz")
+        doc = Base64PDFSource(type="base64", media_type="application/pdf", data="xyz")
         d = doc.model_dump(by_alias=True)
         assert "mediaType" in d
-        doc2 = DocumentSource.model_validate(d)
+        doc2 = TypeAdapter(DocumentSource).validate_python(d)
         assert doc2.media_type == doc.media_type
 
 
@@ -200,13 +201,20 @@ class TestSessionSource:
     """Tests for SessionSource."""
 
     def test_basic_source(self) -> None:
-        src = SessionSource(platform="web")
+        src = SessionSource.model_validate(
+            {"platform": "web", "delegationSessionId": "delegation-1"}
+        )
         assert src.platform == "web"
 
     def test_extra_fields_allowed(self) -> None:
         """SessionSource allows platform-specific extra fields."""
         src = SessionSource.model_validate(
-            {"platform": "slack", "teamId": "T123", "channel": "C456"}
+            {
+                "platform": "slack",
+                "delegationSessionId": "delegation-1",
+                "teamId": "T123",
+                "channel": "C456",
+            }
         )
         assert src.platform == "slack"
 
@@ -429,7 +437,9 @@ class TestInitializeSessionRequestParams:
             skip_permissions_unsafe=True,
             enabled_tool_ids=["slackPostMessageTool"],
             session_location="linear://issue/123",
-            session_source=SessionSource(platform="web"),
+            session_source=SessionSource.model_validate(
+                {"platform": "web", "delegationSessionId": "delegation-1"}
+            ),
             tags=[SessionTag(name="mission:worker")],
             mcp_oauth_callback_uri="https://example.com/callback",
         )
@@ -472,7 +482,9 @@ class TestInitializeSessionRequestParams:
             skip_permissions_unsafe=False,
             enabled_tool_ids=["t1"],
             session_location="loc",
-            session_source=SessionSource(platform="api"),
+            session_source=SessionSource.model_validate(
+                {"platform": "api", "delegationSessionId": "delegation-1"}
+            ),
             tags=[SessionTag(name="tag1")],
             mcp_oauth_callback_uri="https://cb.com",
         )
@@ -531,7 +543,7 @@ class TestAddUserMessageRequestParams:
                 Base64ImageSource(type="base64", data="abc", media_type="image/png"),
             ],
             files=[
-                DocumentSource(type="text", media_type="text/plain", data="content"),
+                PlainTextSource(type="text", media_type="text/plain", data="content"),
             ],
         )
         assert p.text == "Hello"
@@ -1161,7 +1173,7 @@ _RESPONSE_PAIRS: list[tuple[str, type[object], dict[str, object]]] = [
         InitializeSessionResult,
         {
             "sessionId": "s1",
-            "session": {},
+            "session": {"messages": []},
             "settings": {"modelId": "m", "reasoningEffort": "medium"},
         },
     ),
@@ -1169,7 +1181,7 @@ _RESPONSE_PAIRS: list[tuple[str, type[object], dict[str, object]]] = [
         "load_session",
         LoadSessionResult,
         {
-            "session": {},
+            "session": {"messages": []},
             "settings": {"modelId": "m", "reasoningEffort": "medium"},
         },
     ),

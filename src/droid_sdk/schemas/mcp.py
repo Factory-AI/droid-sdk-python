@@ -17,6 +17,7 @@ from droid_sdk.schemas.enums import (  # noqa: TC001
 )
 
 __all__ = [
+    "McpConfigError",
     "McpHttpServerConfigFields",
     "McpRegistryServer",
     "McpServerStatusInfo",
@@ -113,11 +114,25 @@ class McpServerStatusInfo(BaseModel):
     tool_count: int | None = Field(default=None, alias="toolCount")
     """Number of tools provided by this server."""
 
-    server_type: McpServerType | None = Field(default=None, alias="serverType")
+    server_type: McpServerType = Field(alias="serverType")
     """Transport type (stdio or http)."""
 
     has_auth_tokens: bool | None = Field(default=None, alias="hasAuthTokens")
     """Whether authentication tokens are stored for this server."""
+
+    requires_auth: bool | None = Field(default=None, alias="requiresAuth")
+    pending_auth_url: str | None = Field(default=None, alias="pendingAuthUrl")
+    pending_auth_message: str | None = Field(default=None, alias="pendingAuthMessage")
+    pending_auth_state: str | None = Field(default=None, alias="pendingAuthState")
+
+
+class McpConfigError(BaseModel):
+    """MCP configuration parse error."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    path: str
+    message: str
 
 
 class McpStatusSummary(BaseModel):
@@ -142,6 +157,8 @@ class McpStatusSummary(BaseModel):
 
     disabled: int | None = None
     """Number of disabled servers."""
+
+    config_error: McpConfigError | None = Field(default=None, alias="configError")
 
 
 # ============================================================

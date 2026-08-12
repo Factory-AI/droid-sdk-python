@@ -17,12 +17,20 @@ from droid_sdk.client import DroidClient
 from droid_sdk.errors import SessionError
 from droid_sdk.protocol import COMPACTION_TIMEOUT
 from droid_sdk.schemas.client import (
+    ApiSessionSource,
     OutputFormat,
     RewindFileCreation,
     RewindFileSnapshot,
+    SessionSource,
     SessionTag,
 )
-from droid_sdk.schemas.enums import DroidServerMethod
+from droid_sdk.schemas.enums import (
+    AutonomyLevel,
+    AutonomyMode,
+    DroidInteractionMode,
+    DroidServerMethod,
+    SessionPlatform,
+)
 from tests.helpers import InMemoryTransport, make_success_response
 
 _background_tasks: set[asyncio.Task[Any]] = set()
@@ -50,7 +58,7 @@ async def _setup_client(transport: InMemoryTransport) -> DroidClient:
             sent["id"],
             {
                 "sessionId": "sess-1",
-                "session": {"id": "sess-1"},
+                "session": {"id": "sess-1", "messages": []},
                 "settings": {"modelId": "claude-sonnet-4", "reasoningEffort": "medium"},
             },
         )
@@ -93,6 +101,44 @@ class TestListTools:
 
         assert sent["method"] == DroidServerMethod.LIST_TOOLS.value
         assert result.tools == []
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_sends_all_hypothetical_settings_and_tool_controls(self) -> None:
+        transport = InMemoryTransport()
+        client = DroidClient(transport=transport)
+        await client.connect()
+
+        sent, _ = await _call(
+            transport,
+            client.list_tools(
+                model_id="model-1",
+                autonomy_mode=AutonomyMode.AutoHigh,
+                interaction_mode=DroidInteractionMode.Auto,
+                autonomy_level=AutonomyLevel.High,
+                spec_mode_model_id="spec-model",
+                additional_tool_ids=["custom-tool"],
+                enabled_tool_ids=[],
+                disabled_tool_ids=["execute"],
+                restrict_tool_ids=["read", "custom-tool"],
+                skip_permissions_unsafe=False,
+            ),
+            {"tools": []},
+        )
+
+        assert sent["params"] == {
+            "modelId": "model-1",
+            "autonomyMode": "auto-high",
+            "interactionMode": "auto",
+            "autonomyLevel": "high",
+            "specModeModelId": "spec-model",
+            "additionalToolIds": ["custom-tool"],
+            "enabledToolIds": [],
+            "disabledToolIds": ["execute"],
+            "restrictToolIds": ["read", "custom-tool"],
+            "skipPermissionsUnsafe": False,
+        }
 
         await client.close()
 
@@ -449,6 +495,83 @@ class TestRewind:
 
 class TestNewRequestFields:
     @pytest.mark.asyncio
+    async def test_initialize_session_sends_all_tool_control_settings(self) -> None:
+        transport = InMemoryTransport()
+        client = DroidClient(transport=transport)
+        await client.connect()
+
+        sent, _ = await _call(
+            transport,
+            client.initialize_session(
+                machine_id="m",
+                cwd="/tmp",
+                compaction_threshold_check_enabled=False,
+                additional_tool_ids=["custom-tool"],
+                restrict_tool_ids=[],
+                auto_reject_permission_requests=False,
+                disable_builtin_skills=False,
+            ),
+            {
+                "sessionId": "sess-1",
+                "session": {"id": "sess-1", "messages": []},
+                "settings": {"modelId": "model-1", "reasoningEffort": "medium"},
+            },
+        )
+
+        assert sent["params"]["compactionThresholdCheckEnabled"] is False
+        assert sent["params"]["additionalToolIds"] == ["custom-tool"]
+        assert sent["params"]["restrictToolIds"] == []
+        assert sent["params"]["autoRejectPermissionRequests"] is False
+        assert sent["params"]["disableBuiltinSkills"] is False
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_load_session_sends_all_tool_control_settings(self) -> None:
+        transport = InMemoryTransport()
+        client = DroidClient(transport=transport)
+        await client.connect()
+
+        sent, _ = await _call(
+            transport,
+            client.load_session(
+                session_id="sess-1",
+                additional_tool_ids=["custom-tool"],
+                enabled_tool_ids=[],
+                disabled_tool_ids=["execute"],
+                auto_reject_permission_requests=False,
+                disable_builtin_skills=False,
+                session_location="api",
+                session_source=SessionSource(
+                    root=ApiSessionSource(
+                        platform=SessionPlatform.Api,
+                        delegation_session_id="delegation-1",
+                    )
+                ),
+            ),
+            {
+                "session": {"id": "sess-1", "messages": []},
+                "settings": {"modelId": "model-1", "reasoningEffort": "medium"},
+            },
+        )
+
+        assert sent["params"] == {
+            "sessionId": "sess-1",
+            "additionalToolIds": ["custom-tool"],
+            "enabledToolIds": [],
+            "disabledToolIds": ["execute"],
+            "autoRejectPermissionRequests": False,
+            "disableBuiltinSkills": False,
+            "sessionLocation": "api",
+            "sessionSource": {
+                "platform": "api",
+                "delegationSessionId": "delegation-1",
+            },
+        }
+
+        await client.close()
+
+    @pytest.mark.asyncio
     async def test_initialize_session_sends_disabled_tool_ids(self) -> None:
         transport = InMemoryTransport()
         client = DroidClient(transport=transport)
@@ -464,7 +587,7 @@ class TestNewRequestFields:
             ),
             {
                 "sessionId": "sess-1",
-                "session": {"id": "sess-1"},
+                "session": {"id": "sess-1", "messages": []},
                 "settings": {"modelId": "claude-sonnet-4", "reasoningEffort": "medium"},
             },
         )
@@ -486,6 +609,45 @@ class TestNewRequestFields:
         )
 
         assert sent["params"]["disabledToolIds"] == ["read-cli"]
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_update_session_settings_sends_all_tool_control_settings(
+        self,
+    ) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        sent, _ = await _call(
+            transport,
+            client.update_session_settings(
+                additional_tool_ids=["custom-tool"],
+                enabled_tool_ids=[],
+                disabled_tool_ids=["execute"],
+                restrict_tool_ids=["read", "custom-tool"],
+                tags=[
+                    SessionTag(name="typed"),
+                    {"name": "raw", "metadata": {"source": "sdk"}},
+                ],
+                compaction_token_limit=12_000,
+                compaction_threshold_check_enabled=False,
+            ),
+            {},
+        )
+
+        assert sent["params"] == {
+            "additionalToolIds": ["custom-tool"],
+            "enabledToolIds": [],
+            "disabledToolIds": ["execute"],
+            "restrictToolIds": ["read", "custom-tool"],
+            "tags": [
+                {"name": "typed"},
+                {"name": "raw", "metadata": {"source": "sdk"}},
+            ],
+            "compactionTokenLimit": 12_000,
+            "compactionThresholdCheckEnabled": False,
+        }
 
         await client.close()
 

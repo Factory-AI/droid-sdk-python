@@ -77,15 +77,15 @@ class TestConstants:
 
 
 ENUM_MEMBER_COUNTS: list[tuple[type[Enum], int]] = [
-    (DroidServerMethod, 29),
+    (DroidServerMethod, 31),
     (DroidClientMethod, 3),
-    (SessionNotificationType, 20),
-    (ToolConfirmationOutcome, 8),
-    (ToolConfirmationType, 9),
-    (DroidWorkingState, 5),
+    (SessionNotificationType, 35),
+    (ToolConfirmationOutcome, 15),
+    (ToolConfirmationType, 11),
+    (DroidWorkingState, 6),
     (DroidErrorType, 7),
     (McpServerStatus, 5),
-    (McpServerType, 2),
+    (McpServerType, 3),
     (McpStatus, 5),
     (McpAuthOutcome, 3),
     (DecompSessionType, 2),
@@ -107,7 +107,7 @@ ENUM_MEMBER_COUNTS: list[tuple[type[Enum], int]] = [
     (ReasoningEffort, 9),
     (ModelProvider, 7),
     (SettingsLevel, 7),
-    (SkillLocation, 3),
+    (SkillLocation, 4),
 ]
 
 

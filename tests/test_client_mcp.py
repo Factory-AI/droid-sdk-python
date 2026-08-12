@@ -19,6 +19,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from pydantic import ValidationError
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -28,6 +29,7 @@ from droid_sdk.errors import (
     SessionError,
 )
 from droid_sdk.protocol import MCP_AUTH_TIMEOUT
+from droid_sdk.schemas.client import McpOAuthOptions
 from droid_sdk.schemas.enums import DroidServerMethod, SettingsLevel
 
 if TYPE_CHECKING:
@@ -559,6 +561,116 @@ class TestAddMcpServer:
         assert result.success is True
 
     @pytest.mark.asyncio
+    async def test_add_http_server_with_typed_oauth(self) -> None:
+        client, transport = await create_client_with_session()
+
+        async def do_call() -> Any:
+            return await client.add_mcp_server(
+                name="oauth-server",
+                type="http",
+                url="https://mcp.example.com/api",
+                oauth=McpOAuthOptions(
+                    scopes=["read", "write"],
+                    resource=False,
+                    client_metadata_url="https://client.example.com/metadata",
+                    callback_port=8765,
+                ),
+            )
+
+        task = asyncio.create_task(do_call())
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["params"]["oauth"] == {
+            "scopes": ["read", "write"],
+            "resource": False,
+            "clientMetadataUrl": "https://client.example.com/metadata",
+            "callbackPort": 8765,
+        }
+
+        transport.inject_message(make_success_response(sent["id"], {"success": True}))
+        await task
+
+    @pytest.mark.asyncio
+    async def test_add_http_server_validates_and_serializes_oauth_dict(self) -> None:
+        client, transport = await create_client_with_session()
+        oauth = {
+            "clientId": "client-1",
+            "clientSecret": "secret-1",
+            "authorizationServerIssuer": "https://auth.example.com",
+            "tokenEndpointAuthMethod": "client_secret_post",
+        }
+
+        task = asyncio.create_task(
+            client.add_mcp_server(
+                name="oauth-server",
+                type="http",
+                url="https://mcp.example.com/api",
+                oauth=oauth,
+            )
+        )
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["params"]["oauth"] == oauth
+
+        transport.inject_message(make_success_response(sent["id"], {"success": True}))
+        await task
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "oauth",
+        [
+            {
+                "clientId": "client-1",
+                "tokenEndpointAuthMethod": "client_secret_post",
+            },
+            {
+                "clientMetadataUrl": "https://client.example.com/metadata",
+                "clientId": "client-1",
+                "authorizationServerIssuer": "https://auth.example.com",
+            },
+        ],
+    )
+    async def test_add_http_server_rejects_invalid_oauth_mappings(
+        self,
+        oauth: dict[str, Any],
+    ) -> None:
+        client, transport = await create_client_with_session()
+        sent_count = len(transport.sent_messages)
+
+        with pytest.raises(ValidationError):
+            await client.add_mcp_server(
+                name="oauth-server",
+                type="http",
+                url="https://mcp.example.com/api",
+                oauth=oauth,
+            )
+
+        assert len(transport.sent_messages) == sent_count
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_add_http_server_preserves_explicit_false_oauth(self) -> None:
+        client, transport = await create_client_with_session()
+
+        task = asyncio.create_task(
+            client.add_mcp_server(
+                name="no-oauth-server",
+                type="http",
+                url="https://mcp.example.com/api",
+                oauth=False,
+            )
+        )
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["params"]["oauth"] is False
+
+        transport.inject_message(make_success_response(sent["id"], {"success": True}))
+        await task
+
+    @pytest.mark.asyncio
     async def test_add_stdio_server_minimal(self) -> None:
         """Add a stdio server with only required fields."""
         client, transport = await create_client_with_session()
@@ -746,6 +858,7 @@ class TestListMcpServers:
                             "status": "connected",
                             "source": "user",
                             "isManaged": False,
+                            "serverType": "stdio",
                         }
                     ],
                     "summary": {

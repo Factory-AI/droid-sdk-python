@@ -14,13 +14,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from droid_sdk import (
-    AssistantTextDelta,
-    DroidClient,
-    ProcessTransport,
-    ToolConfirmationOutcome,
-    TurnComplete,
-)
+from droid_sdk import ToolConfirmationOutcome
+from droid_sdk.low_level import DroidClient, ProcessTransport
+from droid_sdk.stream import AssistantTextDelta, TurnComplete
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

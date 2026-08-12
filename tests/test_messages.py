@@ -160,7 +160,7 @@ class TestDocumentBlock:
                 },
             }
         )
-        assert block.source["type"] == "text"
+        assert block.source.type == "text"
 
 
 class TestImageBlock:

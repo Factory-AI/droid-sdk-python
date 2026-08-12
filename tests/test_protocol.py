@@ -36,6 +36,7 @@ from droid_sdk.errors import (
 )
 from droid_sdk.errors import (
     DroidClientError,
+    InvalidWorkingDirectoryError,
     ProtocolError,
     SessionNotFoundError,
 )
@@ -47,7 +48,9 @@ from droid_sdk.protocol import (
     MCP_AUTH_TIMEOUT,
     SESSION_INIT_TIMEOUT,
     ProtocolEngine,
+    ProtocolTiming,
 )
+from droid_sdk.schemas.cli import RequestPermissionResult
 from droid_sdk.schemas.constants import (
     FACTORY_PROTOCOL_VERSION,
     JSONRPC_VERSION,
@@ -412,6 +415,47 @@ class TestResponseCorrelation:
         assert result2["result"]["servers"] == ["s1"]
 
 
+class TestProtocolObservability:
+    """Tests for content-free tracing and timing hooks."""
+
+    @pytest.mark.asyncio
+    async def test_trace_metadata_and_timing_callback(
+        self, transport: MockTransport
+    ) -> None:
+        timings: list[ProtocolTiming] = []
+
+        def inject(carrier: dict[str, str]) -> None:
+            carrier["traceparent"] = "00-trace-parent"
+            carrier["ignored"] = "secret"
+
+        traced_engine = ProtocolEngine(
+            transport=transport,
+            trace_meta_injector=inject,
+            timing_callback=timings.append,
+        )
+        await traced_engine.start()
+        try:
+            task = asyncio.create_task(
+                traced_engine.send_request(
+                    "droid.list_skills", {"sensitive": "not-observed"}
+                )
+            )
+            await asyncio.sleep(0.01)
+            sent = transport.get_last_sent()
+            assert sent["_meta"] == {"traceparent": "00-trace-parent"}
+
+            transport.deliver_message(make_success_response(sent["id"]))
+            await task
+
+            assert len(timings) == 1
+            assert timings[0].method == "droid.list_skills"
+            assert timings[0].outcome == "success"
+            assert timings[0].duration_seconds >= 0
+            assert not hasattr(timings[0], "params")
+        finally:
+            await traced_engine.close()
+
+
 # ============================================================
 # VAL-PROTOCOL-004: Timeout handling with metadata
 # ============================================================
@@ -597,6 +641,34 @@ class TestPermissionRequestHandling:
         assert resp["result"]["selectedOption"] == "proceed_once"
 
     @pytest.mark.asyncio
+    async def test_complete_permission_result_is_serialized(
+        self, engine: ProtocolEngine, transport: MockTransport
+    ) -> None:
+        async def handler(params: dict[str, Any]) -> RequestPermissionResult:
+            return RequestPermissionResult(
+                selectedOption="proceed_edit",
+                comment="approved",
+                editedSpecContent="updated spec",
+            )
+
+        engine.set_permission_handler(handler)
+        transport.deliver_message(
+            make_server_request(
+                "perm-complete",
+                "droid.request_permission",
+                {"toolUses": [], "options": []},
+            )
+        )
+        await asyncio.sleep(0.05)
+
+        response = json.loads(transport.sent_messages[-1])
+        assert response["result"] == {
+            "selectedOption": "proceed_edit",
+            "comment": "approved",
+            "editedSpecContent": "updated spec",
+        }
+
+    @pytest.mark.asyncio
     async def test_permission_no_handler_returns_cancel(
         self, engine: ProtocolEngine, transport: MockTransport
     ) -> None:
@@ -637,6 +709,42 @@ class TestPermissionRequestHandling:
         assert len(response_msgs) >= 1
         resp = json.loads(response_msgs[0])
         assert resp["error"]["code"] == JsonRpcErrorCode.INTERNAL_ERROR.value
+
+    @pytest.mark.asyncio
+    async def test_handler_exception_diagnostics_do_not_disclose_secrets(
+        self,
+        engine: ProtocolEngine,
+        transport: MockTransport,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        secret = "SENTINEL-handler-secret-4f81"
+
+        async def bad_handler(params: dict[str, Any]) -> str:
+            raise RuntimeError(f"credential={secret}")
+
+        engine.set_permission_handler(bad_handler)
+        caplog.set_level(logging.WARNING, logger="droid_sdk.protocol")
+        engine._handle_message(
+            json.loads(
+                make_server_request(
+                    "perm-private",
+                    "droid.request_permission",
+                    {"toolUses": [], "options": []},
+                )
+            )
+        )
+        task = next(iter(engine._background_tasks))
+        await task
+
+        response = next(
+            json.loads(message)
+            for message in transport.sent_messages
+            if "perm-private" in message
+        )
+        assert response["error"]["data"] == {"exceptionType": "RuntimeError"}
+        surfaces = (caplog.text, json.dumps(response), str(response), repr(response))
+        assert all(secret not in surface for surface in surfaces)
+        assert "RuntimeError" in caplog.text
 
 
 # ============================================================
@@ -771,6 +879,45 @@ class TestErrorCodeMapping:
         with pytest.raises(ProtocolError) as exc_info:
             await task
         assert exc_info.value.code == JsonRpcErrorCode.INTERNAL_ERROR.value
+
+    @pytest.mark.asyncio
+    async def test_entity_not_found_for_other_method_remains_protocol_error(
+        self, engine: ProtocolEngine, transport: MockTransport
+    ) -> None:
+        task = asyncio.create_task(engine.send_request("droid.list_skills", {}))
+        await asyncio.sleep(0.01)
+        sent = transport.get_last_sent()
+        transport.deliver_message(
+            make_error_response(
+                sent["id"],
+                JsonRpcErrorCode.ENTITY_NOT_FOUND.value,
+                "Tool not found",
+            )
+        )
+
+        with pytest.raises(ProtocolError):
+            await task
+
+    @pytest.mark.asyncio
+    async def test_invalid_initialize_cwd_maps_to_specific_error(
+        self, engine: ProtocolEngine, transport: MockTransport
+    ) -> None:
+        task = asyncio.create_task(
+            engine.send_request("droid.initialize_session", {"cwd": "/missing/project"})
+        )
+        await asyncio.sleep(0.01)
+        sent = transport.get_last_sent()
+        transport.deliver_message(
+            make_error_response(
+                sent["id"],
+                JsonRpcErrorCode.INVALID_PARAMS.value,
+                "Invalid working directory",
+            )
+        )
+
+        with pytest.raises(InvalidWorkingDirectoryError) as exc_info:
+            await task
+        assert exc_info.value.cwd == "/missing/project"
 
     @pytest.mark.asyncio
     async def test_error_response_contains_metadata(
