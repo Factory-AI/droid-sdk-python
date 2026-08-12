@@ -595,6 +595,15 @@ With `include_partial_messages=True`, the stream yields every
 | `McpAuthRequired` | `server_name`, `auth_url`, `message`, `state` |
 | `McpAuthCompleted` | `server_name`, `outcome`, `message` |
 
+`ToolProgress.update` is a `ToolProgressUpdate`:
+
+| Type | Fields |
+| --- | --- |
+| `ToolProgressUpdate` | `type`, `tool_name`, `status`, `details`, `text`, `error`, `timestamp`, `parameters`, `value_snippet`, `terminal_id`, `full_output`, `subagent_session_id` |
+
+`ToolProgressUpdate.type` is `"tool_call"`, `"tool_result"`, `"error"`,
+`"status"`, or `"message"`.
+
 Unknown high-level events are ignored. Use `session.on_notification()` when
 the application needs raw notifications.
 
@@ -684,7 +693,7 @@ Reading `stream.result` before completion raises `StreamIncompleteError`.
 
 ### Result types
 
-`RunResult[T]` has the same terminal states as the TypeScript SDK:
+`RunResult[T]` is a union of three terminal states:
 
 ```python
 RunResult[T] = RunSuccess[T] | RunInterrupted[T] | RunFailure[T]
@@ -700,7 +709,7 @@ RunResult[T] = RunSuccess[T] | RunInterrupted[T] | RunFailure[T]
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `subtype` | `str` | Terminal state |
-| `text` | `str` | Final committed assistant text, with delta fallback |
+| `text` | `str` | Final assistant text; reconstructed from deltas if no complete message arrived |
 | `messages` | `tuple[Message, ...]` | Complete messages from the turn |
 | `usage` | `Usage \| None` | Per-turn token and credit usage |
 | `duration` | `timedelta` | Wall-clock duration |
@@ -744,10 +753,6 @@ print(context.used, context.remaining, context.limit, context.accuracy)
 | --- | --- |
 | `Usage` | `input_tokens`, `output_tokens`, `cache_creation_tokens`, `cache_read_tokens`, `thinking_tokens`, `factory_credits` |
 | `ContextUsage` | `used`, `remaining`, `limit`, `accuracy`, `updated_at` |
-| `ToolProgressUpdate` | `type`, `tool_name`, `status`, `details`, `text`, `error`, `timestamp`, `parameters`, `value_snippet`, `terminal_id`, `full_output`, `subagent_session_id` |
-
-`ToolProgressUpdate.type` is `"tool_call"`, `"tool_result"`, `"error"`,
-`"status"`, or `"message"`.
 
 ### Failures and exceptions
 
@@ -782,8 +787,7 @@ async with session.stream("Perform a long review.", timeout=60) as stream:
         handle(event)
 ```
 
-`timeout` is a Python spelling for the TypeScript per-turn abort signal. On
-expiry, the SDK interrupts the turn and raises `RunTimeoutError`.
+On expiry, the SDK interrupts the turn and raises `RunTimeoutError`.
 
 ### Interrupt a turn
 
@@ -813,7 +817,7 @@ async with session.stream("Inspect every test.") as stream:
 Context exit interrupts unfinished work. A bare async iterator cannot
 guarantee immediate cleanup on `break`.
 `await stream.aclose()` explicitly interrupts and detaches an unfinished
-stream; it is idempotent after release.
+stream; it is idempotent.
 
 ## Inputs and outputs
 
