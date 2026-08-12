@@ -1020,10 +1020,9 @@ session = Session(
 )
 ```
 
-`request.options` is authoritative. `respond()` accepts only an offered
-`ToolConfirmationOutcome` and optional `comment` or `edited_spec_content`.
-This preserves every TypeScript outcome, including exact-path persistence,
-auto-run levels, MCP persistence, edited plans, and new-session handoff.
+Droid decides which outcomes are on offer. `respond()` accepts only an
+outcome listed in `request.options`, plus optional `comment` or
+`edited_spec_content`.
 
 An absent handler, an invalid response, or a handler exception cancels the
 request. Handler failures appear as `ErrorEvent` values; they do not raise
@@ -1049,8 +1048,7 @@ Cancel the questionnaire:
 return request.cancel()
 ```
 
-Question helpers copy the required question index and text. Answers remain
-strings, matching the TypeScript wire contract. Without a handler, or when a
+Answers are always strings on the wire. Without a handler, or when a
 handler fails or returns an invalid shape, the questionnaire is cancelled and
 the stream receives an `ErrorEvent`.
 
@@ -1154,7 +1152,7 @@ config = SessionConfig(
 )
 ```
 
-The four sets preserve TypeScript semantics:
+Each of the four sets has a distinct role:
 
 - `additional_tools` adds IDs to the catalog.
 - `enabled_tools` enables otherwise available tools.
