@@ -11,7 +11,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from droid_sdk._high_level._immutable import FrozenJsonObject, freeze_json_object
+from droid_sdk._high_level._immutable import (
+    FrozenJsonObject,
+    ensure_aware,
+    freeze_json_object,
+)
 from droid_sdk._high_level.enums import (
     Autonomy,
     Mode,
@@ -28,11 +32,6 @@ _TOOL_SET_FIELDS = (
     "disabled_tools",
     "restrict_tools",
 )
-
-
-def _aware(value: datetime, name: str) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(f"{name} must be timezone-aware")
 
 
 def _freeze_tool_sets(value: object) -> None:
@@ -180,8 +179,8 @@ class SavedSession:
     is_favorite: bool = False
 
     def __post_init__(self) -> None:
-        _aware(self.modified_at, "modified_at")
-        _aware(self.created_at, "created_at")
+        ensure_aware(self.modified_at, "modified_at")
+        ensure_aware(self.created_at, "created_at")
         if self.cwd is not None:
             object.__setattr__(self, "cwd", Path(self.cwd))
 

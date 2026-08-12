@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Generic, Literal, TypeAlias, TypeVar
+from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import ValidationError
 
@@ -15,6 +15,7 @@ from droid_sdk._high_level._immutable import (
     FrozenJsonObject,
     FrozenJsonValue,
     JsonValue,
+    ensure_aware,
     freeze_json,
     freeze_json_object,
 )
@@ -33,11 +34,6 @@ from droid_sdk._high_level.enums import (
 from droid_sdk._high_level.extensions import McpServerStatusInfo, McpStatusSummary
 
 T = TypeVar("T")
-
-
-def _aware(value: datetime, name: str) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(f"{name} must be timezone-aware")
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,8 +141,8 @@ class ConversationMessage:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "content", tuple(self.content))
-        _aware(self.created_at, "created_at")
-        _aware(self.updated_at, "updated_at")
+        ensure_aware(self.created_at, "created_at")
+        ensure_aware(self.updated_at, "updated_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +215,7 @@ class ErrorEvent:
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
-        _aware(self.timestamp, "timestamp")
+        ensure_aware(self.timestamp, "timestamp")
 
 
 Message: TypeAlias = (
@@ -276,7 +272,7 @@ class ToolProgressUpdate:
 
     def __post_init__(self) -> None:
         if self.timestamp is not None:
-            _aware(self.timestamp, "timestamp")
+            ensure_aware(self.timestamp, "timestamp")
         if self.parameters is not None:
             object.__setattr__(
                 self,
@@ -317,7 +313,7 @@ class ContextUsage:
     updated_at: datetime
 
     def __post_init__(self) -> None:
-        _aware(self.updated_at, "updated_at")
+        ensure_aware(self.updated_at, "updated_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -403,6 +399,17 @@ def _freeze_structured_output(
     return freeze_json_object(value, where="structured_output")
 
 
+def _seal_terminal_result(
+    result: RunSuccess[Any] | RunInterrupted[Any] | RunFailure[Any],
+) -> None:
+    object.__setattr__(result, "messages", tuple(result.messages))
+    object.__setattr__(
+        result,
+        "structured_output",
+        _freeze_structured_output(result.structured_output),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class RunResult(Generic[T]):
     """Runtime base class shared by all terminal result dataclasses."""
@@ -449,12 +456,7 @@ class RunSuccess(RunResult[T]):
     interrupted: Literal[False] = field(default=False, init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "messages", tuple(self.messages))
-        object.__setattr__(
-            self,
-            "structured_output",
-            _freeze_structured_output(self.structured_output),
-        )
+        _seal_terminal_result(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -475,12 +477,7 @@ class RunInterrupted(RunResult[T]):
     interrupted: Literal[True] = field(default=True, init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "messages", tuple(self.messages))
-        object.__setattr__(
-            self,
-            "structured_output",
-            _freeze_structured_output(self.structured_output),
-        )
+        _seal_terminal_result(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -506,12 +503,7 @@ class RunFailure(RunResult[T]):
             "error_structured_output",
         }:
             raise ValueError(f"invalid failure subtype: {self.subtype!r}")
-        object.__setattr__(self, "messages", tuple(self.messages))
-        object.__setattr__(
-            self,
-            "structured_output",
-            _freeze_structured_output(self.structured_output),
-        )
+        _seal_terminal_result(self)
 
 
 StreamMessage: TypeAlias = Message | RunSuccess[T] | RunInterrupted[T] | RunFailure[T]

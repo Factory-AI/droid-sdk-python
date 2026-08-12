@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Iterator, Mapping, Sequence
 from types import MappingProxyType
-from typing import TypeAlias, cast
+from typing import TYPE_CHECKING, TypeAlias, cast
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 JsonValue: TypeAlias = (
     bool | int | float | str | None | list["JsonValue"] | dict[str, "JsonValue"]
@@ -49,6 +52,12 @@ class RedactedStrMapping(Mapping[str, str]):
         if not isinstance(other, Mapping):
             return False
         return self._values == other
+
+
+def ensure_aware(value: datetime, name: str) -> None:
+    """Reject naive datetimes so the public models stay timezone-aware."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
 
 
 def freeze_json(value: object, *, where: str = "value") -> FrozenJsonValue:
