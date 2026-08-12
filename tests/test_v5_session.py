@@ -30,6 +30,7 @@ from droid_sdk import (
     SessionReplacementError,
     TextDocumentSource,
 )
+from droid_sdk._util import cancellation_checkpoint
 from droid_sdk.mcp import create_sdk_mcp_server
 from droid_sdk.observability import LogEvent, MetricEvent, Observability
 from droid_sdk.schemas.client import SessionSettings as WireSessionSettings
@@ -744,7 +745,6 @@ async def test_cancelled_replacement_rpc_restores_open_source(operation: str) ->
 @pytest.mark.parametrize("operation", ["fork", "compact", "rewind"])
 async def test_cancelled_replacement_after_successor_creation_restores_source(
     operation: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = SessionConfig(
         additional_tools={"Custom"},
@@ -763,11 +763,7 @@ async def test_cancelled_replacement_after_successor_creation_restores_source(
         entered.set()
         await gate.wait()
 
-    monkeypatch.setattr(
-        session_module,
-        "_replacement_handoff_checkpoint",
-        gated_handoff,
-    )
+    session._replacement_checkpoint = gated_handoff
     if operation == "fork":
         replacement = asyncio.create_task(session.fork())
     elif operation == "compact":
@@ -803,26 +799,22 @@ async def test_cancelled_replacement_racing_close_cleans_successor() -> None:
     await session.open()
     entered = asyncio.Event()
     gate = asyncio.Event()
-    original = session_module._replacement_handoff_checkpoint
 
     async def gated_handoff() -> None:
         entered.set()
         await gate.wait()
-        await original()
+        await cancellation_checkpoint()
 
-    session_module._replacement_handoff_checkpoint = gated_handoff
-    try:
-        replacement = asyncio.create_task(session.fork())
-        await entered.wait()
-        closing = asyncio.create_task(session.close())
-        while not session._replacement_close_requested:
-            await asyncio.sleep(0)
-        replacement.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await replacement
-        await closing
-    finally:
-        session_module._replacement_handoff_checkpoint = original
+    session._replacement_checkpoint = gated_handoff
+    replacement = asyncio.create_task(session.fork())
+    await entered.wait()
+    closing = asyncio.create_task(session.close())
+    while not session._replacement_close_requested:
+        await asyncio.sleep(0)
+    replacement.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await replacement
+    await closing
 
     client = FakeClient.instances[0]
     assert client.close_session_calls == 1

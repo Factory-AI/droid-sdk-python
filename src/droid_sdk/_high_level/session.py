@@ -81,7 +81,12 @@ from droid_sdk._high_level.messages import (
 from droid_sdk._high_level.output import prepare_output_adapter
 from droid_sdk._high_level.runtime import Runtime
 from droid_sdk._high_level.streaming import RunStream
-from droid_sdk._util import consume_task_result
+from droid_sdk._util import (
+    cancel_and_drain,
+    cancellation_checkpoint,
+    consume_task_result,
+    wait_shielded,
+)
 from droid_sdk.client import DroidClient
 from droid_sdk.errors import (
     DroidConnectionError,
@@ -109,7 +114,7 @@ from droid_sdk.schemas.enums import (
 from droid_sdk.transport import ProcessTransport
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -175,6 +180,11 @@ class Session:
         self._close_requested = False
         self._replacement_task: asyncio.Task[tuple[Any, Session]] | None = None
         self._replacement_close_requested = False
+        # Cancellation delivery point between successor attach and source
+        # retirement; tests inject a gated coroutine to widen the window.
+        self._replacement_checkpoint: Callable[[], Awaitable[None]] = (
+            cancellation_checkpoint
+        )
         self._load_mcp_configs: list[dict[str, Any]] = []
         self._load_options: dict[str, object] = {
             "additional_tools": self._config.additional_tools,
@@ -286,14 +296,12 @@ class Session:
         assert task is not None
         cancelled = False
         try:
-            await asyncio.shield(task)
+            await wait_shielded(task, self._cancel_open_waiter)
         except asyncio.CancelledError:
             cancelled = True
             raise
         finally:
-            if cancelled:
-                await self._cancel_open_waiter(task)
-            else:
+            if not cancelled:
                 self._open_waiters -= 1
 
     async def _cancel_open_waiter(self, task: asyncio.Task[None]) -> None:
@@ -306,9 +314,7 @@ class Session:
 
     async def _finish_cancelled_open(self, task: asyncio.Task[None]) -> None:
         cleanup_task: asyncio.Task[None] | None = None
-        if not task.done():
-            task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+        await cancel_and_drain(task)
         async with self._lifecycle_lock:
             if self._state is _State.OPEN:
                 self._state = _State.CLOSING
@@ -1352,17 +1358,17 @@ class Session:
             self._replacement_close_requested = False
             task = asyncio.create_task(self._replacement_impl(operation))
             self._replacement_task = task
-        try:
-            return await asyncio.shield(task)
-        except asyncio.CancelledError:
-            if not task.done():
-                task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-            if task.done() and not task.cancelled():
-                with contextlib.suppress(BaseException):
-                    _, successor = task.result()
-                    await self._restore_after_cancelled_replacement(successor)
-            raise
+        return await wait_shielded(task, self._abandon_cancelled_replacement)
+
+    async def _abandon_cancelled_replacement(
+        self,
+        task: asyncio.Task[tuple[Any, Session]],
+    ) -> None:
+        await cancel_and_drain(task)
+        if not task.cancelled():
+            with contextlib.suppress(BaseException):
+                _, successor = task.result()
+                await self._restore_after_cancelled_replacement(successor)
 
     async def _replacement_impl(
         self,
@@ -1373,7 +1379,7 @@ class Session:
             result = await operation()
             successor = await self._attach_replacement(result.new_session_id)
             self._replacement_successor = successor
-            await _replacement_handoff_checkpoint()
+            await self._replacement_checkpoint()
             self._retire_after_replacement(successor)
             return result, successor
         except asyncio.CancelledError:
@@ -1645,11 +1651,6 @@ async def run(
         except asyncio.CancelledError:
             await close_task
             raise
-
-
-async def _replacement_handoff_checkpoint() -> None:
-    """Give cancellation a deterministic handoff point after replacement."""
-    await asyncio.sleep(0)
 
 
 __all__ = ["Session", "run"]
