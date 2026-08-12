@@ -241,11 +241,23 @@ Configure behavior and attach handlers with `SessionConfig` and
 `InteractionHandlers`:
 
 ```python
-from droid_sdk import Autonomy, InteractionHandlers, SessionConfig
+from droid_sdk import (
+    Autonomy,
+    InteractionHandlers,
+    PermissionRequest,
+    PermissionResponse,
+    SessionConfig,
+    ToolConfirmationOutcome,
+)
+
+
+def approve(request: PermissionRequest) -> PermissionResponse:
+    return request.respond(ToolConfirmationOutcome.PROCEED_ONCE)
+
 
 config = SessionConfig(
     autonomy=Autonomy.LOW,
-    disabled_tools={"Execute"},
+    disabled_tools={"Execute"},  # tool overrides are sets of tool IDs
     disable_builtin_skills=True,
 )
 
@@ -255,6 +267,10 @@ async with Session(
 ) as session:
     ...
 ```
+
+Handlers are plain callables that inspect the request and choose an offered
+outcome; see [Permissions and user input](#permissions-and-user-input) for
+the full contract.
 
 `SessionConfig` also accepts mode-specific models, MCP servers, tags, source
 attribution, `machine_id`, automatic permission rejection, and native-tool
@@ -272,6 +288,9 @@ async with Session.resume(
         async for _ in stream:
             pass
 ```
+
+Get a session ID from `session.id`, `result.session_id`, or
+[`list_sessions()`](#list-saved-sessions).
 
 Resume restores conversation history, working directory, title, and settings;
 runtime concerns such as handlers and MCP servers must be attached again (see
@@ -300,9 +319,9 @@ finally:
     await session.close()
 ```
 
-Repeated `open()` while open and repeated `close()` after closing are safe.
-A closed session cannot be reopened. Calling an active method before `open()`
-raises `SessionNotOpenError`.
+`open()` and `close()` are idempotent, but a closed session cannot be
+reopened. Calling an active method before `open()` raises
+`SessionNotOpenError`.
 
 Concurrent `open()` calls share one startup attempt. If one waiter is
 cancelled, startup continues for the others. Cancelling the final waiter
@@ -457,15 +476,9 @@ match the `update_settings()` table above.
 `on_notification(callback, type=None)` passes
 `Mapping[str, object]` to the callback and returns an unsubscribe function.
 
-`SessionSource` requires `platform: SessionPlatform`; all remaining attribution
-fields default to `None`: `delegation_session_id`, `team_id`, `channel`,
-`thread_ts`, `user_id`, `automation_id`, `agent_session_id`, `issue_id`,
-`issue_url`, `issue_identifier`, `organization_id`, `cloud_id`, `issue_key`,
-`site_id`, `project_id`, `comment_id`, `task_id`, `tenant_id`,
-`conversation_id`, `service_url`, `conversation_type`, `root_message_id`,
-`channel_id`, `aad_object_id`, `report_id`, `repo_url`, `criterion_id`, and
-`computer_id`. Required combinations are validated when converted to the
-wire protocol.
+`SessionSource` requires `platform: SessionPlatform`; every other attribution
+field is optional and defaults to `None`. Required combinations are validated
+when converted to the wire protocol.
 
 ## Streaming and results
 
