@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 
 from droid_sdk import (
@@ -28,15 +27,11 @@ async def question(request: QuestionRequest) -> QuestionResponse:
     return request.submit(answers)
 
 
-async def main(run_turn: bool = False) -> None:
+async def main() -> None:
     handlers = InteractionHandlers(
         on_permission=permission,
         on_question=question,
     )
-    if not run_turn:
-        assert handlers.on_permission is permission
-        print("self-test: interaction handlers ready")
-        return
     async with Session(interactions=handlers) as session:
         async with session.stream(
             "Ask one multiple-choice question, then stop.",
@@ -48,6 +43,4 @@ async def main(run_turn: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", action="store_true")
-    asyncio.run(main(parser.parse_args().run))
+    asyncio.run(main())

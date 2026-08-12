@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 from typing import Literal
 
@@ -21,11 +20,7 @@ class Review(BaseModel):
     findings: list[Finding]
 
 
-async def main(run_turn: bool = False) -> None:
-    if not run_turn:
-        assert Review.model_json_schema()["type"] == "object"
-        print("self-test: output schema ready")
-        return
+async def main() -> None:
     result = await run(
         "Return a short repository summary and zero or more findings.",
         output=Review,
@@ -36,6 +31,4 @@ async def main(run_turn: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", action="store_true")
-    asyncio.run(main(parser.parse_args().run))
+    asyncio.run(main())

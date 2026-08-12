@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import contextlib
 
-from droid_sdk import Autonomy, Mode, Session, SessionReplacedError
+from droid_sdk import Autonomy, Session, SessionReplacedError
 
 
-async def main(run_operations: bool = False) -> None:
-    if not run_operations:
-        assert Mode.AUTO.value == "auto"
-        assert Autonomy.LOW.value == "low"
-        print("self-test: operation types ready")
-        return
-
+async def main() -> None:
     session = Session()
     await session.open()
     try:
@@ -45,6 +38,4 @@ async def main(run_operations: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", action="store_true")
-    asyncio.run(main(parser.parse_args().run))
+    asyncio.run(main())

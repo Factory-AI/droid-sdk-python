@@ -1754,22 +1754,21 @@ Run commands from the repository root:
 
 | Example | Command | Expected result |
 | --- | --- | --- |
-| Attachments | `uv run python examples/attachments.py --run` | Live image, text, and PDF turn |
+| Attachments | `uv run python examples/attachments.py` | Live image, text, and PDF turn |
 | Interaction helpers | `uv run python examples/interaction_helpers.py` | Offline typed responses |
-| Interactions | `uv run python examples/interactions.py --run` | Live permission/question turn |
-| Interactive session | `uv run python examples/interactive_session.py --run` | Two live turns sharing history |
+| Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
+| Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |
 | Saved sessions | `uv run python examples/list_saved_sessions.py` | Local saved-session count |
 | Low-level session | `uv run python examples/low_level_session.py [--droid PATH] [--cwd PATH]` | Initialize and list tools |
 | Observability | `uv run python examples/observability.py` | Offline isolated sink counts |
-| One-shot run | `uv run python examples/one_shot.py --run` | Live one-turn result |
+| One-shot run | `uv run python examples/one_shot.py` | Live one-turn result |
 | Resume | `uv run python examples/resume_session.py --session-id ID` | Live resumed turn |
-| SDK MCP | `uv run python examples/sdk_mcp.py --run` | Live in-process MCP result |
-| Session operations | `uv run python examples/session_operations.py --run` | Live settings, discovery, fork, and compact |
-| Structured output | `uv run python examples/structured_output_model.py --run` | Live validated model output |
+| SDK MCP | `uv run python examples/sdk_mcp.py` | Live in-process MCP result |
+| Session operations | `uv run python examples/session_operations.py` | Live settings, discovery, fork, and compact |
+| Structured output | `uv run python examples/structured_output_model.py` | Live validated model output |
 
-Omitting `--run` from the seven flagged examples performs their offline
-self-test instead of a model call. Live examples require an authenticated
-local Droid CLI or `FACTORY_API_KEY`; every model call uses a finite timeout.
+Live examples require an authenticated local Droid CLI or `FACTORY_API_KEY`;
+every model call uses a finite timeout.
 
 ## Known limitations
 

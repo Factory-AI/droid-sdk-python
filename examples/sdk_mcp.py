@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 
 from droid_sdk import (
@@ -28,15 +27,8 @@ def allow_example_tool(request: PermissionRequest) -> PermissionResponse:
     return request.respond(ToolConfirmationOutcome.PROCEED_ONCE)
 
 
-async def main(run_turn: bool = False) -> None:
+async def main() -> None:
     server = create_sdk_mcp_server("example-tools", [lookup_owner])
-    if not run_turn:
-        config = await server.start()
-        assert config.url.startswith("http://127.0.0.1:")
-        await server.close()
-        assert server.config is None
-        print("self-test: MCP started and stopped")
-        return
     async with Session(
         config=SessionConfig(mcp_servers=[server]),
         interactions=InteractionHandlers(on_permission=allow_example_tool),
@@ -51,6 +43,4 @@ async def main(run_turn: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", action="store_true")
-    asyncio.run(main(parser.parse_args().run))
+    asyncio.run(main())

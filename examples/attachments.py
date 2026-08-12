@@ -1,20 +1,13 @@
-"""Load local attachments without starting Droid."""
+"""Send local image and document attachments in one turn."""
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import base64
 import tempfile
 from pathlib import Path
 
-from droid_sdk import (
-    Document,
-    Image,
-    PdfDocumentSource,
-    TextDocumentSource,
-    run,
-)
+from droid_sdk import Document, Image, run
 
 
 def minimal_pdf() -> bytes:
@@ -54,7 +47,7 @@ def minimal_pdf() -> bytes:
     return bytes(data)
 
 
-async def main(run_turn: bool = False) -> None:
+async def main() -> None:
     png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAQ0lEQVR4AcXB"
         "AQEAAAiDMKR/5xuD7QYjJDGJSUxiEpOYxCQmMYlJTGISk5jEJCYxiUlMYhKT"
@@ -69,28 +62,14 @@ async def main(run_turn: bool = False) -> None:
         pdf_path.write_bytes(minimal_pdf())
         image_path.write_bytes(png)
 
-        image = Image.from_path(image_path)
-        text = Document.from_path(text_path)
-        pdf = Document.from_path(pdf_path)
-
-        assert isinstance(text.source, TextDocumentSource)
-        assert isinstance(pdf.source, PdfDocumentSource)
-        if run_turn:
-            result = await run(
-                "Describe the attached red square and summarize both files.",
-                images=[image],
-                files=[text, pdf],
-                timeout=60,
-            )
-            assert result.success, result.error
-            assert result.text
-            print(result.text)
-        print(f"image: {image.source.media_type}")
-        print(f"text: {text.source.name} ({text.source.mime})")
-        print(f"pdf: {pdf.source.name} ({len(pdf.source.data)} base64 chars)")
+        result = await run(
+            "Describe the attached red square and summarize both files.",
+            images=[Image.from_path(image_path)],
+            files=[Document.from_path(text_path), Document.from_path(pdf_path)],
+            timeout=60,
+        )
+        print(result.text)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run", action="store_true")
-    asyncio.run(main(parser.parse_args().run))
+    asyncio.run(main())
