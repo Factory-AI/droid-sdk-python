@@ -150,9 +150,8 @@ config = SessionConfig(mcp_servers=[server])
 The session starts and stops SDK MCP servers. Every start uses an ephemeral
 port and fresh bearer token.
 
-`Runtime` configures executable, extra args, environment, transport, and
-privacy-safe observability. A caller transport must already be connected,
-takes precedence over process options, and is closed by the session.
+`Runtime` configures the executable, extra args, environment, and
+privacy-safe observability.
 
 ## Saved sessions and examples
 

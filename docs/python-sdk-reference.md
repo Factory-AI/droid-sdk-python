@@ -129,7 +129,7 @@ A turn begins with `session.stream(prompt)` and ends when the stream yields a
 A turn's outcome is a value, not an exception: `RunSuccess`,
 `RunInterrupted`, or `RunFailure`. Interrupted turns, execution failures, and
 structured-output failures do not raise. Failures in the machinery around a
-turn (setup, transport, process, protocol, timeout, and cancellation) raise
+turn (setup, connection, process, protocol, timeout, and cancellation) raise
 exceptions.
 
 ### Ownership
@@ -140,7 +140,6 @@ exceptions.
 | `Session` used with `async with` | The context manager |
 | Manually opened `Session` | The caller |
 | In-process MCP servers | The session |
-| Caller-provided transport | The session |
 
 ### Typing
 
@@ -305,7 +304,7 @@ the table below). It does not accept a new working directory or model.
 | Conversation history | Interaction handlers |
 | Working directory | Session-scoped MCP servers |
 | Title | Observability sinks |
-| Session settings | Custom transport |
+| Session settings | |
 
 ### Open and close manually
 
@@ -1557,7 +1556,7 @@ can inject values into it.
 
 ### Custom runtime
 
-`Runtime` holds process and transport configuration:
+`Runtime` holds process configuration:
 
 ```python
 runtime = Runtime(
@@ -1567,9 +1566,8 @@ runtime = Runtime(
 )
 ```
 
-A supplied transport must already be connected. It takes precedence over
-process and API-key options, and the session closes it. Environment entries
-extend the current process environment when the SDK starts Droid.
+Environment entries extend the current process environment when the SDK
+starts Droid.
 
 #### Runtime schema
 
@@ -1578,10 +1576,7 @@ extend the current process environment when the SDK starts Droid.
 | `executable` | `str \| Path \| None` |
 | `args` | `Sequence[str]` |
 | `env` | `Mapping[str, str]` |
-| `transport` | `Transport \| None` |
 | `observability` | `Observability \| None` |
-
-`Runtime.uses_supplied_transport` is `True` when `transport` is not `None`.
 
 ## API index
 
