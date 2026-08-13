@@ -1,0 +1,25 @@
+src/droid_sdk/_high_level/streaming.py
+  6a64c2829661fd81 657-662,667
+tests/test_v5_streaming_core.py
+  6a64c2829661fd81 876-895
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "e92b6c45a47325c14ed25b36f68aca09aa2aa558",
+  "prompts": {
+    "6a64c2829661fd81": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "87840782-b26d-4cd5-878a-6df42e2ff992",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 17,
+      "accepted_lines": 105,
+      "overriden_lines": 0
+    }
+  }
+}
