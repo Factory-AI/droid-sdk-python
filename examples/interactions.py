@@ -35,7 +35,7 @@ async def main() -> None:
     async with Session(interactions=handlers) as session:
         async with session.stream(
             "Ask one multiple-choice question, then stop.",
-            timeout=60,
+            timeout=180,
         ) as stream:
             async for _ in stream:
                 pass
