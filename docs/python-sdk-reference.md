@@ -210,8 +210,6 @@ result = await run("Review this repository.", model="auto")
 Pin a session to the router the same way:
 
 ```python
-from droid_sdk import Session
-
 async with Session(model="auto") as session:
     ...
 ```
@@ -222,14 +220,12 @@ Move a live session onto the router:
 await session.update_settings(model="auto")
 ```
 
-`reasoning_effort` combines with the router exactly as it does with a
-fixed model ID. `session.settings.model` reports `auto`; the router
-chooses the underlying model per task and can pick a different model for
-each response.
+`reasoning_effort` works the same as with a fixed model ID.
+`session.settings.model` reports `auto`; the underlying model can differ
+per response.
 
 The model ID `auto` is unrelated to `Mode.AUTO`, the default interaction
-mode, and to `Autonomy`, the permission level. Those settings control
-behavior, not model choice.
+mode, and to `Autonomy`, the permission level.
 
 #### See which model handled a response
 
