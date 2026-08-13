@@ -22,6 +22,8 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from types import TracebackType  # noqa: TC003
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from typing_extensions import Self
+
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -292,7 +294,7 @@ class DroidClient:
     # Async context manager
     # ----------------------------------------------------------
 
-    async def __aenter__(self) -> DroidClient:
+    async def __aenter__(self) -> Self:
         """Connect on context entry."""
         await self.connect()
         return self

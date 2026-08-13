@@ -389,7 +389,7 @@ async def test_tool_progress_preserves_explicit_empty_text() -> None:
     ],
 )
 def test_javascript_number_stringification(
-    value: int | float,
+    value: float,
     expected: str,
 ) -> None:
     assert _javascript_number_string(value) == expected

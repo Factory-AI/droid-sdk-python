@@ -21,9 +21,11 @@ Use `run()` for one turn:
 import asyncio
 from droid_sdk import run
 
+
 async def main() -> None:
     result = await run("Summarize this repository.", timeout=60)
     print(result.text if result.success else result.subtype)
+
 
 asyncio.run(main())
 ```
@@ -35,6 +37,7 @@ import asyncio
 
 from droid_sdk import AssistantMessage, Session
 
+
 async def main() -> None:
     async with Session() as session:
         async with session.stream("What does this project do?") as stream:
@@ -42,6 +45,7 @@ async def main() -> None:
                 if isinstance(event, AssistantMessage):
                     print(event.text)
         print(stream.result.subtype, session.id)
+
 
 asyncio.run(main())
 ```
@@ -71,9 +75,11 @@ import asyncio
 from pydantic import BaseModel
 from droid_sdk import Document, Image, run
 
+
 class Summary(BaseModel):
     title: str
     risks: list[str]
+
 
 async def main() -> None:
     result = await run(
@@ -84,6 +90,7 @@ async def main() -> None:
     )
     if result.output is not None:
         print(result.output.title)
+
 
 asyncio.run(main())
 ```
@@ -143,9 +150,11 @@ loopback-only Streamable HTTP server; this in-process server support lives in
 from droid_sdk import SessionConfig
 from droid_sdk.mcp import create_sdk_mcp_server, tool
 
+
 @tool("lookup", "Look up a local value.")
 def lookup(key: str) -> str:
     return f"value:{key}"
+
 
 server = create_sdk_mcp_server("local-tools", [lookup])
 config = SessionConfig(mcp_servers=[server])

@@ -247,29 +247,26 @@ class ProcessTransport:
         if process is None or process.stdout is None:
             return
 
-        try:
-            while True:
-                line_bytes = await process.stdout.readline()
-                if not line_bytes:
-                    # EOF — process closed stdout
-                    break
+        while True:
+            line_bytes = await process.stdout.readline()
+            if not line_bytes:
+                # EOF — process closed stdout
+                break
 
-                line = line_bytes.decode("utf-8", errors="replace").strip()
-                if not line:
-                    # Skip blank lines
-                    continue
+            line = line_bytes.decode("utf-8", errors="replace").strip()
+            if not line:
+                # Skip blank lines
+                continue
 
-                # Try to parse as JSON
-                if line.startswith("{") or line.startswith("["):
-                    try:
-                        yield json.loads(line)
-                    except json.JSONDecodeError as e:
-                        logger.warning("Malformed JSON on stdout: %s", e)
-                else:
-                    # Raw child output can contain environment secrets.
-                    logger.debug("Skipped non-JSON child stdout")
-        except asyncio.CancelledError:
-            raise
+            # Try to parse as JSON
+            if line.startswith(("{", "[")):
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError as e:
+                    logger.warning("Malformed JSON on stdout: %s", e)
+            else:
+                # Raw child output can contain environment secrets.
+                logger.debug("Skipped non-JSON child stdout")
 
         # After stdout closes, check process exit status
         if self._is_closing:

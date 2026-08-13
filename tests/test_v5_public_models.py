@@ -12,6 +12,7 @@ from typing import Literal
 
 import pytest
 from pydantic import BaseModel, RootModel, ValidationError
+from typing_extensions import Self
 
 import droid_sdk._high_level.attachments as attachment_module
 from droid_sdk import (
@@ -209,7 +210,7 @@ def test_attachment_rejects_file_changed_during_read(
             self._path = file_path
             self._file = original_open(file_path, "rb")
 
-        def __enter__(self) -> ChangingFile:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *args: object) -> None:

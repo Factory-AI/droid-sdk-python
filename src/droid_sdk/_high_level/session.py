@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
 from pydantic import BaseModel, ValidationError
+from typing_extensions import Self
 
 from droid_sdk._high_level._convert import (
     document_to_wire,
@@ -218,7 +219,7 @@ class Session(SessionOperationsMixin):
             raise SessionNotOpenError("The session has not been opened")
         return self._settings
 
-    async def __aenter__(self) -> Session:
+    async def __aenter__(self) -> Self:
         await self.open()
         return self
 
