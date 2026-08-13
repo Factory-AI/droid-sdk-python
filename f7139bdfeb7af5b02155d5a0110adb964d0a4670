@@ -1,0 +1,39 @@
+tests/test_v5_public_models.py
+  6a64c2829661fd81 318-338,917-920,929,936
+src/droid_sdk/_high_level/session.py
+  6a64c2829661fd81 39,87,173,178
+tests/typing/positive.py
+  6a64c2829661fd81 88-92
+docs/python-sdk-reference.md
+  6a64c2829661fd81 261,870-871
+src/droid_sdk/_high_level/_session_operations.py
+  6a64c2829661fd81 61,112-115,118-121,207-210,214-217
+src/droid_sdk/_high_level/extensions.py
+  6a64c2829661fd81 49-52,64
+src/droid_sdk/_high_level/config.py
+  6a64c2829661fd81 7,37-49,54,166-169
+src/droid_sdk/_high_level/_convert.py
+  6a64c2829661fd81 166,319,322-324,327-329,332-334
+tests/test_v5_session.py
+  6a64c2829661fd81 312-327,599
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "f7139bdfeb7af5b02155d5a0110adb964d0a4670",
+  "prompts": {
+    "6a64c2829661fd81": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "87840782-b26d-4cd5-878a-6df42e2ff992",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 118,
+      "total_deletions": 40,
+      "accepted_lines": 189,
+      "overriden_lines": 5
+    }
+  }
+}
