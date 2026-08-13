@@ -873,22 +873,26 @@ async def test_requested_output_that_never_arrives_is_a_failure() -> None:
     assert missing.result.output_validation_error is None
     assert missing.result.text == "no structured output here"
 
-    plain = RunStream[None](
-        expected_turn_id="turn",
-        session_id="session",
-    )
-    plain.feed_notification(
-        {
-            "type": "assistant_text_delta",
-            "messageId": "assistant",
-            "blockIndex": 0,
-            "textDelta": "no output requested",
-        }
-    )
-    plain.feed_notification(_complete())
-    await _collect(plain)
-    assert isinstance(plain.result, RunSuccess)
-    assert plain.result.output is None
+    # Sessions always pass an adapter object; with output=None it carries no
+    # wire format and must not trigger the output guarantee.
+    for adapter in (None, prepare_output_adapter()):
+        plain = RunStream[None](
+            expected_turn_id="turn",
+            session_id="session",
+            output_adapter=adapter,
+        )
+        plain.feed_notification(
+            {
+                "type": "assistant_text_delta",
+                "messageId": "assistant",
+                "blockIndex": 0,
+                "textDelta": "no output requested",
+            }
+        )
+        plain.feed_notification(_complete())
+        await _collect(plain)
+        assert isinstance(plain.result, RunSuccess)
+        assert plain.result.output is None
 
 
 @pytest.mark.asyncio

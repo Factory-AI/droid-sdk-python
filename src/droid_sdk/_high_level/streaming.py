@@ -654,11 +654,17 @@ class StreamStateTracker(Generic[T]):
             else timedelta(milliseconds=notification.duration_ms)
         )
         reason = notification.reason
+        # Sessions always pass an adapter object; output was only requested
+        # when it carries a wire format.
+        wants_output = (
+            self.output_adapter is not None
+            and self.output_adapter.output_format is not None
+        )
         if reason in {
             AgentTurnCompletionReason.Completed,
             AgentTurnCompletionReason.SpecHandoff,
         }:
-            if self.output_adapter is None or output is not None:
+            if not wants_output or output is not None:
                 return RunSuccess(
                     text=text,
                     messages=tuple(self._messages),
