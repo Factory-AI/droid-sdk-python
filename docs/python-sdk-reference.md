@@ -220,9 +220,9 @@ Move a live session onto the router:
 await session.update_settings(model="auto")
 ```
 
-`reasoning_effort` works the same as with a fixed model ID.
-`session.settings.model` reports `auto`; the underlying model can differ
-per response.
+Omit `reasoning_effort`; the router chooses the effort along with the
+model and ignores a supplied value. `session.settings.model` reports
+`auto`; the underlying model can differ per response.
 
 The model ID `auto` is unrelated to `Mode.AUTO`, the default interaction
 mode, and to `Autonomy`, the permission level.
