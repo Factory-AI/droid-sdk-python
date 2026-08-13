@@ -107,6 +107,10 @@ autonomy, tags, and all four native-tool controls:
 - `disabled_tools`: subtract IDs
 - `restrict_tools`: restrictive allowlist; it never elevates permission
 
+`model="auto"` selects the
+[Factory Router](https://docs.factory.ai/model-independence/factory-router),
+which routes each task to the best model automatically.
+
 Use `list_tools()`, `list_skills()`, MCP operations, `context()`,
 `enter_spec()`/`leave_spec()`, `rename()`, and raw filtered
 `on_notification()` subscriptions for ongoing sessions.

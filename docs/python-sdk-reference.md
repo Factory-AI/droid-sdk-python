@@ -191,6 +191,63 @@ await session.update_settings(
 See [Update settings](#update-settings) for the full `update_settings()`
 contract.
 
+### Use the Factory Router
+
+The model ID `auto` selects the
+[Factory Router](https://docs.factory.ai/model-independence/factory-router),
+which routes each task to the model with the best balance of quality,
+latency, and cost. Some product surfaces label it Auto Model; the model
+ID is `auto` everywhere.
+
+```python
+from droid_sdk import run
+
+result = await run("Review this repository.", model="auto")
+```
+
+Pin a session to the router the same way:
+
+```python
+async with Session(model="auto") as session:
+    ...
+```
+
+Move a live session onto the router:
+
+```python
+await session.update_settings(model="auto")
+```
+
+Omit `reasoning_effort`; the router chooses the effort along with the
+model and ignores a supplied value. `session.settings.model` reports
+`auto`; the underlying model can differ per response.
+
+The model ID `auto` is unrelated to `Mode.AUTO`, the default interaction
+mode, and to `Autonomy`, the permission level.
+
+#### See which model handled a response
+
+Assistant messages in the wire `create_message` notification carry the
+underlying model in `modelId`; `routerId` is `"auto"` when the router
+made the choice. High-level messages omit these fields. Subscribe with
+[`on_notification()`](#subscribe-to-raw-notifications):
+
+```python
+from collections.abc import Mapping
+
+
+def report_routing(notification: Mapping[str, object]) -> None:
+    message = notification.get("message")
+    if isinstance(message, Mapping) and message.get("role") == "assistant":
+        print(message.get("modelId"), message.get("routerId"))
+
+
+unsubscribe = session.on_notification(report_routing, type="create_message")
+```
+
+Wire payloads use camelCase keys and evolve server-side; treat absent
+keys as normal.
+
 ### Configure mode-specific models
 
 ```python
@@ -202,7 +259,7 @@ config = SessionConfig(
     spec_reasoning_effort=ReasoningEffort.HIGH,
 )
 
-async with Session(model="auto", config=config) as session:
+async with Session(model="model-id", config=config) as session:
     async with session.stream("Draft an implementation plan.") as stream:
         async for _ in stream:
             pass
@@ -241,6 +298,8 @@ async with Session(
         async for message in stream:
             handle(message)
 ```
+
+`model="auto"` selects the [Factory Router](#use-the-factory-router).
 
 Configure behavior and attach handlers with `SessionConfig` and
 `InteractionHandlers`:
@@ -1744,6 +1803,7 @@ Run commands from the repository root:
 | Example | Command | Expected result |
 | --- | --- | --- |
 | Attachments | `uv run python examples/attachments.py` | Live image, text, and PDF turn |
+| Factory Router | `uv run python examples/factory_router.py` | Live routed turns with per-response model IDs |
 | Interaction helpers | `uv run python examples/interaction_helpers.py` | Offline typed responses |
 | Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
 | Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |
