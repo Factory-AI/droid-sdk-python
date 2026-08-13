@@ -1,0 +1,23 @@
+pyproject.toml
+  1d235cd2a7cda876 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "f2f0d1d5fe499299b816beb03f250393152b3785",
+  "prompts": {
+    "1d235cd2a7cda876": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6f9a11bc-bf12-475f-89f2-2eb11328e619",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
