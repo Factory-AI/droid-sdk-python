@@ -229,10 +229,9 @@ mode, and to `Autonomy`, the permission level.
 
 #### See which model handled a response
 
-High-level messages do not report the model that produced them. The wire
-`create_message` notification does: assistant messages carry the
-underlying model in `modelId`, and `routerId` is `"auto"` when the
-router made the choice. Subscribe with
+Assistant messages in the wire `create_message` notification carry the
+underlying model in `modelId`; `routerId` is `"auto"` when the router
+made the choice. High-level messages omit these fields. Subscribe with
 [`on_notification()`](#subscribe-to-raw-notifications):
 
 ```python
