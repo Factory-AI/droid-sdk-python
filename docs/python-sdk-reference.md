@@ -160,7 +160,9 @@ models are immutable dataclasses.
 
 Model IDs are strings because availability depends on account and
 organization policy. Omit `model` to use the configured default, which
-lives in `~/.factory/settings.json` under `sessionDefaultSettings`.
+lives in `~/.factory/settings.json` under `sessionDefaultSettings`. Pass
+`model="auto"` to let the [Factory Router](#use-the-factory-router)
+choose a model per task.
 An unknown model ID is rejected by the backend: the turn returns
 `RunFailure(subtype="error_during_execution")` with the rejection message
 in `error.message`.
@@ -191,6 +193,68 @@ await session.update_settings(
 See [Update settings](#update-settings) for the full `update_settings()`
 contract.
 
+### Use the Factory Router
+
+The model ID `auto` selects the
+[Factory Router](https://docs.factory.ai/model-independence/factory-router),
+which routes each task to the model with the best balance of quality,
+latency, and cost. Some product surfaces label it Auto Model; the model
+ID is `auto` everywhere.
+
+```python
+from droid_sdk import run
+
+result = await run("Review this repository.", model="auto")
+```
+
+Pin a session to the router the same way:
+
+```python
+from droid_sdk import Session
+
+async with Session(model="auto") as session:
+    ...
+```
+
+Move a live session onto the router:
+
+```python
+await session.update_settings(model="auto")
+```
+
+`reasoning_effort` combines with the router exactly as it does with a
+fixed model ID. `session.settings.model` reports `auto`; the router
+chooses the underlying model per task and can pick a different model for
+each response.
+
+The model ID `auto` is unrelated to `Mode.AUTO`, the default interaction
+mode, and to `Autonomy`, the permission level. Those settings control
+behavior, not model choice.
+
+#### See which model handled a response
+
+High-level messages do not report the model that produced them. The wire
+`create_message` notification does: assistant messages carry the
+underlying model in `modelId`, and `routerId` is `"auto"` when the
+router made the choice. Subscribe with
+[`on_notification()`](#subscribe-to-raw-notifications):
+
+```python
+from collections.abc import Mapping
+
+
+def report_routing(notification: Mapping[str, object]) -> None:
+    message = notification.get("message")
+    if isinstance(message, Mapping) and message.get("role") == "assistant":
+        print(message.get("modelId"), message.get("routerId"))
+
+
+unsubscribe = session.on_notification(report_routing, type="create_message")
+```
+
+Wire payloads use camelCase keys and evolve server-side; treat absent
+keys as normal.
+
 ### Configure mode-specific models
 
 ```python
@@ -208,9 +272,10 @@ async with Session(model="auto", config=config) as session:
             pass
 ```
 
-The primary model handles Auto turns. `spec_model` handles Spec turns.
-Switch modes on a live session with `enter_spec()` and `leave_spec()`; see
-[Modes](#modes).
+The primary model handles Auto turns; `model="auto"` makes that the
+[Factory Router](#use-the-factory-router). `spec_model` handles Spec
+turns. Switch modes on a live session with `enter_spec()` and
+`leave_spec()`; see [Modes](#modes).
 
 ### Model configuration contract
 
@@ -241,6 +306,8 @@ async with Session(
         async for message in stream:
             handle(message)
 ```
+
+`model="auto"` selects the [Factory Router](#use-the-factory-router).
 
 Configure behavior and attach handlers with `SessionConfig` and
 `InteractionHandlers`:
@@ -1744,6 +1811,7 @@ Run commands from the repository root:
 | Example | Command | Expected result |
 | --- | --- | --- |
 | Attachments | `uv run python examples/attachments.py` | Live image, text, and PDF turn |
+| Factory Router | `uv run python examples/factory_router.py` | Live routed turns with per-response model IDs |
 | Interaction helpers | `uv run python examples/interaction_helpers.py` | Offline typed responses |
 | Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
 | Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |

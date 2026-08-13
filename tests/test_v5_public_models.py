@@ -922,6 +922,7 @@ def test_public_enum_values() -> None:
     "example",
     [
         "attachments.py",
+        "factory_router.py",
         "observability.py",
         "structured_output_model.py",
     ],
