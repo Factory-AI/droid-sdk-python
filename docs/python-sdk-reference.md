@@ -159,7 +159,11 @@ models are immutable dataclasses.
 ## Models
 
 Model IDs are strings because availability depends on account and
-organization policy. Omit `model` to use the configured default.
+organization policy. Omit `model` to use the configured default, which
+lives in `~/.factory/settings.json` under `sessionDefaultSettings`.
+An unknown model ID is rejected by the backend: the turn returns
+`RunFailure(subtype="error_during_execution")` with the rejection message
+in `error.message`.
 
 ### Select a model
 
