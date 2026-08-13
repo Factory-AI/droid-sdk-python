@@ -77,4 +77,8 @@ select = [
     "SIM",  # flake8-simplify
     "TCH",  # flake8-type-checking
     "RUF",  # ruff-specific rules
+    "PYI",  # flake8-pyi typing quality
+    "PIE",  # flake8-pie misc lints
+    "C4",   # flake8-comprehensions
+    "TRY203",  # useless re-raise
 ]

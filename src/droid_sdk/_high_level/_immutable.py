@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 JsonValue: TypeAlias = (
-    bool | int | float | str | None | list["JsonValue"] | dict[str, "JsonValue"]
+    bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
 )
 JsonObject: TypeAlias = dict[str, JsonValue]
 Scalar: TypeAlias = str | int | float | bool | None
@@ -20,9 +20,9 @@ FrozenJsonValue: TypeAlias = (
     | int
     | float
     | str
-    | None
     | tuple["FrozenJsonValue", ...]
     | Mapping[str, "FrozenJsonValue"]
+    | None
 )
 FrozenJsonObject: TypeAlias = Mapping[str, FrozenJsonValue]
 

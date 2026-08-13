@@ -1012,24 +1012,16 @@ JSON-compatible values; the SDK validates this and freezes them recursively.
 Raw schema output remains `JsonObject`.
 
 ```python
-JsonValue = (
-    bool
-    | int
-    | float
-    | str
-    | None
-    | list["JsonValue"]
-    | dict[str, "JsonValue"]
-)
+JsonValue = bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
 JsonObject = dict[str, JsonValue]
 FrozenJsonValue = (
     bool
     | int
     | float
     | str
-    | None
     | tuple["FrozenJsonValue", ...]
     | Mapping[str, "FrozenJsonValue"]
+    | None
 )
 FrozenJsonObject = Mapping[str, FrozenJsonValue]
 ```
@@ -1389,10 +1381,7 @@ passed through `SessionConfig` are session-scoped.
 
 ```python
 McpServerConfig = (
-    StdioMcpServerConfig
-    | HttpMcpServerConfig
-    | SseMcpServerConfig
-    | SdkMcpServer
+    StdioMcpServerConfig | HttpMcpServerConfig | SseMcpServerConfig | SdkMcpServer
 )
 ```
 
@@ -1452,9 +1441,7 @@ Compaction summarizes older conversation history to free context-window
 space.
 
 ```python
-outcome = await session.compact(
-    instructions="Keep decisions and unresolved failures."
-)
+outcome = await session.compact(instructions="Keep decisions and unresolved failures.")
 
 async with outcome.session as compacted:
     print(outcome.removed_count)

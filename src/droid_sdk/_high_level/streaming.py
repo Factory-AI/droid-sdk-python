@@ -259,7 +259,7 @@ def _json_values(values: list[Any]) -> list[object]:
     return [_json_value(value) for value in values]
 
 
-def _javascript_number_string(value: int | float) -> str:
+def _javascript_number_string(value: float) -> str:
     """Return the ECMAScript ``Number::toString`` spelling for finite JSON numbers."""
     number = float(value)
     if not math.isfinite(number):
@@ -760,7 +760,7 @@ class StreamStateTracker(Generic[T]):
         )
 
 
-class RunStream(Generic[T, E], AsyncIterator[E]):
+class RunStream(AsyncIterator[E], Generic[T, E]):
     """A queue-backed, deterministic single-consumer turn stream."""
 
     def __init__(

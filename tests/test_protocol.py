@@ -1762,10 +1762,7 @@ class TestHandlerTaskCancellationOnClose:
             start_count += 1
             if start_count >= 2:
                 handlers_started.set()
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
+            await asyncio.sleep(100)
             return "approve"
 
         engine.set_permission_handler(slow_handler)
