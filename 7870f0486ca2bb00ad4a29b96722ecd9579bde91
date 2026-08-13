@@ -1,0 +1,27 @@
+examples/session_operations.py
+  6a64c2829661fd81 28
+examples/structured_output_model.py
+  6a64c2829661fd81 27
+examples/attachments.py
+  6a64c2829661fd81 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "7870f0486ca2bb00ad4a29b96722ecd9579bde91",
+  "prompts": {
+    "6a64c2829661fd81": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "87840782-b26d-4cd5-878a-6df42e2ff992",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 3,
+      "accepted_lines": 87,
+      "overriden_lines": 0
+    }
+  }
+}
