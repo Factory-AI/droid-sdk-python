@@ -25,7 +25,7 @@ async def main() -> None:
         async with successor:
             async with successor.stream(
                 "Reply with exactly: ready to compact",
-                timeout=60,
+                timeout=180,
             ) as stream:
                 async for _ in stream:
                     pass

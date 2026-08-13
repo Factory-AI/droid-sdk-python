@@ -66,7 +66,7 @@ async def main() -> None:
             "Describe the attached red square and summarize both files.",
             images=[Image.from_path(image_path)],
             files=[Document.from_path(text_path), Document.from_path(pdf_path)],
-            timeout=60,
+            timeout=180,
         )
         print(result.text)
 

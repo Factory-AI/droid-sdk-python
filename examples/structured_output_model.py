@@ -24,7 +24,7 @@ async def main() -> None:
     result = await run(
         "Return a short repository summary and zero or more findings.",
         output=Review,
-        timeout=60,
+        timeout=180,
     )
     assert result.output is not None, result.output_validation_error
     print(result.output.summary)
