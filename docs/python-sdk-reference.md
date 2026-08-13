@@ -1677,9 +1677,10 @@ starts Droid.
 | `ErrorType` | `CONNECTION_ERROR`, `PROTOCOL_ERROR`, `SESSION_ERROR`, `TIMEOUT_ERROR`, `DROID_CLIENT_ERROR`, `PROCESS_EXIT_ERROR`, `ERROR` |
 
 `ReasoningEffort` defines `NONE`, `DYNAMIC`, `OFF`, `MINIMAL`, `LOW`,
-`MEDIUM`, `HIGH`, `EXTRA_HIGH`, and `MAX`. Model and tool IDs remain strings.
+`MEDIUM`, `HIGH`, `EXTRA_HIGH`, and `MAX`. Model and tool IDs are plain
+strings, not enums.
 
-Additional root enum wire values are:
+On the wire, these enums use the following values:
 
 ```text
 ToolCategory: read, edit, execute, other
@@ -1705,7 +1706,7 @@ All SDK-defined exceptions derive from `DroidError`. Python built-ins and
 | `StreamIncompleteError` | A stream result was read before completion |
 | `InvalidAttachmentError` | A local attachment was invalid |
 | `SessionNotOpenError` | An operation required an opened session |
-| `SessionBusyError` | The session already had an active turn |
+| `SessionBusyError` | The session already had an active turn or replacement in progress |
 | `SessionClosedError` | The session was closed |
 | `SessionReplacedError` | A successor retired the source session |
 | `SessionReplacementError` | Successor load or source restore failed |
@@ -1715,8 +1716,7 @@ All SDK-defined exceptions derive from `DroidError`. Python built-ins and
 | `DroidProcessError` | The Droid process exited unexpectedly |
 | `DroidProtocolError` | Protocol negotiation or validation failed |
 
-`SessionError` is the compatibility base exported by `droid_sdk.errors`; it
-is intentionally absent from the package root. Exception metadata is public:
+Exception constructor metadata is public:
 
 | Exception | Additional constructor fields |
 | --- | --- |
@@ -1753,7 +1753,7 @@ every model call uses a finite timeout.
 
 ## Known limitations
 
-- The high-level API runs local Droid subprocess sessions only.
+- The SDK runs local Droid subprocess sessions only.
 - The API is asyncio-only.
 - Hooks are configured through Droid files, not Python callbacks.
 - Image URLs are not supported by the local runtime.
