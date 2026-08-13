@@ -1583,35 +1583,6 @@ extend the current process environment when the SDK starts Droid.
 
 `Runtime.uses_supplied_transport` is `True` when `transport` is not `None`.
 
-### Low-level API
-
-Applications that manage the JSON-RPC protocol or the transport themselves
-may import:
-
-```python
-from droid_sdk.low_level import DroidClient, ProcessTransport
-```
-
-The low-level package exposes protocol models and request methods. It does not
-provide high-level ordering or cleanup guarantees. Prefer
-`session.on_notification()` when an existing session needs raw notifications.
-
-| Type | Purpose |
-| --- | --- |
-| `DroidClient` | Typed JSON-RPC requests, callbacks, and notifications |
-| `ProcessTransport` | Start and connect to a local Droid process |
-| `Transport` | Async framed-message transport protocol |
-| Protocol request models | Typed request parameters |
-| Protocol response models | Success and failure envelopes |
-| Protocol notification models | Raw session notifications |
-
-Low-level request and response models preserve protocol field names. The
-high-level types documented above provide Python naming and lifecycle
-guarantees.
-
-`droid_sdk.low_level.__all__` is the authoritative machine-readable API
-index: the types above plus every name in `droid_sdk.schemas.__all__`.
-
 ## API index
 
 ### Root constants and supporting types
@@ -1774,7 +1745,6 @@ Run commands from the repository root:
 | Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
 | Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |
 | Saved sessions | `uv run python examples/list_saved_sessions.py` | Local saved-session count |
-| Low-level session | `uv run python examples/low_level_session.py [--droid PATH] [--cwd PATH]` | Initialize and list tools |
 | Observability | `uv run python examples/observability.py` | Offline isolated sink counts |
 | One-shot run | `uv run python examples/one_shot.py` | Live one-turn result |
 | Resume | `uv run python examples/resume_session.py --session-id ID` | Live resumed turn |

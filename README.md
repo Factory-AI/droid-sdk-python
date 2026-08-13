@@ -166,13 +166,6 @@ The complete command matrix is in
 See the complete contract in
 [`docs/python-sdk-reference.md`](docs/python-sdk-reference.md).
 
-## Low-level escape hatch
-
-Applications that own JSON-RPC lifecycle can import `DroidClient`,
-`ProcessTransport`, transport protocols, and wire schemas from
-`droid_sdk.low_level`. Legacy query/client/transport/event aliases are not
-exported at package root.
-
 ## Limitations
 
 - Local `droid` subprocesses only
