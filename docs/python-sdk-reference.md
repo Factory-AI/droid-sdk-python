@@ -877,7 +877,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from droid_sdk import run
+from droid_sdk import RunSuccess, run
 
 
 class Finding(BaseModel):
@@ -895,8 +895,8 @@ result = await run(
     output=Review,
 )
 
-if result.output is not None:
-    print(result.output.summary)
+if isinstance(result, RunSuccess) and result.output is not None:
+    print(result.output.summary)  # success guarantees output when requested
 elif result.output_validation_error is not None:
     print(result.output_validation_error)
 ```
@@ -906,9 +906,10 @@ types raise `TypeError` before the turn starts. With `output=Review`, the
 return type is `RunResult[Review]`.
 
 When structured output arrives, the SDK validates it against the model.
-Missing or invalid output leaves `output` as `None` and populates
-`output_validation_error`; it does not change Droid's terminal subtype.
-A successful turn can therefore have `output is None`.
+If output was requested, `RunSuccess` guarantees `result.output` is set.
+Missing or invalid output turns the result into `RunFailure` with subtype
+`error_structured_output`; the failure keeps the text, messages, usage, raw
+`structured_output`, and `output_validation_error` for inspection.
 
 ### Use raw JSON Schema
 
@@ -970,9 +971,11 @@ FrozenJsonValue = (
 FrozenJsonObject = Mapping[str, FrozenJsonValue]
 ```
 
-Pydantic adaptation errors use `output_validation_error`. Droid's own
-structured-output errors use `structured_output_error`. Neither field changes
-the terminal subtype chosen by Droid.
+Both local and Droid-side output failures produce `RunFailure` with subtype
+`error_structured_output`. To tell them apart, check
+`structured_output_error.code`: local failures use `local_validation_failed`
+(with the Pydantic error in `output_validation_error`) or
+`local_output_missing`; Droid-side failures use Droid's own codes.
 
 ## Permissions and user input
 

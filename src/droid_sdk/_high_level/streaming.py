@@ -658,14 +658,44 @@ class StreamStateTracker(Generic[T]):
             AgentTurnCompletionReason.Completed,
             AgentTurnCompletionReason.SpecHandoff,
         }:
-            return RunSuccess(
+            if self.output_adapter is None or output is not None:
+                return RunSuccess(
+                    text=text,
+                    messages=tuple(self._messages),
+                    usage=usage,
+                    duration=duration,
+                    turn_count=1,
+                    session_id=self.session_id,
+                    output=output,
+                    structured_output=raw,
+                    output_validation_error=validation_error,
+                )
+            # Output was requested but is absent: success must guarantee
+            # output, so this maps to the same failure subtype Droid uses.
+            if validation_error is not None:
+                code = "local_validation_failed"
+                message = "Structured output failed local validation"
+            else:
+                code = "local_output_missing"
+                message = "The turn completed without usable structured output"
+            return RunFailure(
+                subtype="error_structured_output",
+                error=ErrorEvent(
+                    message=message,
+                    error_type=ErrorType.ERROR,
+                    timestamp=self._now(),
+                ),
+                structured_output_error=StructuredOutputError(
+                    code=code,
+                    message=message,
+                ),
                 text=text,
                 messages=tuple(self._messages),
                 usage=usage,
                 duration=duration,
                 turn_count=1,
                 session_id=self.session_id,
-                output=output,
+                output=None,
                 structured_output=raw,
                 output_validation_error=validation_error,
             )

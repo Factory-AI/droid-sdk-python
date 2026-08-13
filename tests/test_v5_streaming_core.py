@@ -813,6 +813,10 @@ async def test_structured_output_raw_adapted_fallback_and_validation_error() -> 
     )
     invalid.feed_notification(_complete())
     await _collect(invalid)
+    assert isinstance(invalid.result, RunFailure)
+    assert invalid.result.subtype == "error_structured_output"
+    assert invalid.result.structured_output_error is not None
+    assert invalid.result.structured_output_error.code == "local_validation_failed"
     assert invalid.result.output is None
     assert invalid.result.output_validation_error is not None
     assert invalid.result.structured_output == {
@@ -839,6 +843,52 @@ async def test_structured_output_raw_adapted_fallback_and_validation_error() -> 
     raw.feed_notification(_complete())
     await _collect(raw)
     assert raw.result.output == {"summary": "fallback"}
+
+
+@pytest.mark.asyncio
+async def test_requested_output_that_never_arrives_is_a_failure() -> None:
+    missing = RunStream[Mapping[str, object]](
+        expected_turn_id="turn",
+        session_id="session",
+        output_adapter=cast(
+            "Any",
+            prepare_output_adapter(JsonSchema({"type": "object"})),
+        ),
+    )
+    missing.feed_notification(
+        {
+            "type": "assistant_text_delta",
+            "messageId": "assistant",
+            "blockIndex": 0,
+            "textDelta": "no structured output here",
+        }
+    )
+    missing.feed_notification(_complete())
+    await _collect(missing)
+    assert isinstance(missing.result, RunFailure)
+    assert missing.result.subtype == "error_structured_output"
+    assert missing.result.structured_output_error is not None
+    assert missing.result.structured_output_error.code == "local_output_missing"
+    assert missing.result.output is None
+    assert missing.result.output_validation_error is None
+    assert missing.result.text == "no structured output here"
+
+    plain = RunStream[None](
+        expected_turn_id="turn",
+        session_id="session",
+    )
+    plain.feed_notification(
+        {
+            "type": "assistant_text_delta",
+            "messageId": "assistant",
+            "blockIndex": 0,
+            "textDelta": "no output requested",
+        }
+    )
+    plain.feed_notification(_complete())
+    await _collect(plain)
+    assert isinstance(plain.result, RunSuccess)
+    assert plain.result.output is None
 
 
 @pytest.mark.asyncio
@@ -874,7 +924,8 @@ async def test_non_finite_structured_output_fallback_always_terminalizes(
 
     events = await _collect(stream)
     assert events[-1] is stream.result
-    assert isinstance(stream.result, RunSuccess)
+    assert isinstance(stream.result, RunFailure)
+    assert stream.result.subtype == "error_structured_output"
     assert stream.result.output is None
     assert stream.result.structured_output is None
     assert stream.result.output_validation_error is not None
