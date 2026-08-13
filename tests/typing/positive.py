@@ -36,6 +36,7 @@ from droid_sdk import (
     RunStream,
     RunSuccess,
     Session,
+    SessionConfig,
     SessionSettings,
     SessionSettingsUpdate,
     StreamEvent,
@@ -84,6 +85,11 @@ settings = SessionSettings(
 )
 assert_type(settings.model, str)
 assert_type(settings.reasoning_effort, ReasoningEffort)
+assert_type(settings.disabled_tools, frozenset[str] | None)
+
+SessionConfig(disabled_tools={"Execute"})
+SessionConfig(disabled_tools=["Execute"])
+SessionConfig(disabled_tools=("Execute",))
 
 settings_update = SessionSettingsUpdate(model="claude-sonnet")
 assert_type(settings_update.model, str | None)

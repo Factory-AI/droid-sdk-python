@@ -37,6 +37,7 @@ from droid_sdk import (
     ImageBlock,
     InvalidAttachmentError,
     JsonSchema,
+    ListToolsOptions,
     McpConfigError,
     McpOAuthOptions,
     McpServerStatus,
@@ -312,6 +313,27 @@ def test_configuration_is_recursively_immutable() -> None:
     assert isinstance(config.tags[0].metadata, MappingProxyType)
     with pytest.raises(dataclasses.FrozenInstanceError):
         config.mode = Mode.AUTO  # type: ignore[misc]
+
+
+def test_tool_overrides_accept_any_iterable_and_reject_strings() -> None:
+    config = SessionConfig(
+        additional_tools=["CustomTool"],
+        enabled_tools=("Read",),
+        disabled_tools=iter(["Execute"]),
+        restrict_tools={"Read", "Grep"},
+    )
+    assert config.additional_tools == frozenset({"CustomTool"})
+    assert config.enabled_tools == frozenset({"Read"})
+    assert config.disabled_tools == frozenset({"Execute"})
+    assert config.restrict_tools == frozenset({"Read", "Grep"})
+
+    options = ListToolsOptions(disabled_tools=["Execute"])
+    assert options.disabled_tools == frozenset({"Execute"})
+
+    with pytest.raises(TypeError, match="disabled_tools"):
+        SessionConfig(disabled_tools="Execute")
+    with pytest.raises(TypeError, match="restrict_tools"):
+        ListToolsOptions(restrict_tools="Read")
 
 
 def test_json_schema_is_recursive_and_rejects_non_json() -> None:
@@ -892,6 +914,10 @@ def test_public_enum_values() -> None:
     )
 
 
+@pytest.mark.skipif(
+    os.environ.get("DROID_LIVE_TESTS") != "1",
+    reason="set DROID_LIVE_TESTS=1 to run examples against droid exec",
+)
 @pytest.mark.parametrize(
     "example",
     [
@@ -900,14 +926,14 @@ def test_public_enum_values() -> None:
         "structured_output_model.py",
     ],
 )
-def test_offline_examples_execute(example: str) -> None:
+def test_live_examples_execute(example: str) -> None:
     root = Path(__file__).parents[1]
     completed = subprocess.run(
         [sys.executable, str(root / "examples" / example)],
         check=False,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout

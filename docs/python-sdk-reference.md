@@ -258,7 +258,7 @@ def approve(request: PermissionRequest) -> PermissionResponse:
 
 config = SessionConfig(
     autonomy=Autonomy.LOW,
-    disabled_tools={"Execute"},  # tool overrides are sets of tool IDs
+    disabled_tools={"Execute"},  # any iterable of tool IDs works here
     disable_builtin_skills=True,
 )
 
@@ -369,10 +369,10 @@ clear them.
 | `tags` | `Sequence[SessionTag] \| None` |
 | `compaction_token_limit` | `int \| None` |
 | `compaction_threshold_check_enabled` | `bool \| None` |
-| `additional_tools` | `set[str] \| frozenset[str] \| None` |
-| `enabled_tools` | `set[str] \| frozenset[str] \| None` |
-| `disabled_tools` | `set[str] \| frozenset[str] \| None` |
-| `restrict_tools` | `set[str] \| frozenset[str] \| None` |
+| `additional_tools` | `Iterable[str] \| None` |
+| `enabled_tools` | `Iterable[str] \| None` |
+| `disabled_tools` | `Iterable[str] \| None` |
+| `restrict_tools` | `Iterable[str] \| None` |
 
 It returns `UpdateSettingsResult`. The result currently has no fields.
 
@@ -439,10 +439,10 @@ first. Timestamps are timezone-aware.
 | `session_source` | `SessionSource \| None` |
 | `auto_reject_permission_requests` | `bool \| None` |
 | `disable_builtin_skills` | `bool \| None` |
-| `additional_tools` | `set[str] \| frozenset[str] \| None` |
-| `enabled_tools` | `set[str] \| frozenset[str] \| None` |
-| `disabled_tools` | `set[str] \| frozenset[str] \| None` |
-| `restrict_tools` | `set[str] \| frozenset[str] \| None` |
+| `additional_tools` | `Iterable[str] \| None` |
+| `enabled_tools` | `Iterable[str] \| None` |
+| `disabled_tools` | `Iterable[str] \| None` |
+| `restrict_tools` | `Iterable[str] \| None` |
 
 `Session.resume(session_id, ...)` accepts only values that can be reattached:
 
@@ -453,7 +453,7 @@ first. Timestamps are timezone-aware.
 | `mcp_servers` | `Sequence[McpServerConfig]` |
 | `runtime` | `Runtime \| None` |
 | `api_key` | `str \| None` |
-| `disabled_tools` | `set[str] \| frozenset[str] \| None` |
+| `disabled_tools` | `Iterable[str] \| None` |
 | `auto_reject_permission_requests` | `bool \| None` |
 | `disable_builtin_skills` | `bool \| None` |
 | `session_source` | `SessionSource \| None` |
@@ -867,8 +867,8 @@ PDFs to `MAX_PDF_ATTACHMENT_BYTES` (3 MiB).
 | `Document.from_bytes(data, name=...)` | `Document` |
 
 `images` accepts `Sequence[Image]`. `files` accepts `Sequence[Document]`.
-Wire payloads use canonical `mediaType` fields. The high-level `mime` hint on
-text documents is not forwarded as an extra protocol field.
+Wire payloads use canonical `mediaType` fields. The optional `mime` hint on
+text documents is forwarded with the document.
 
 ### Return a Pydantic model
 
@@ -1167,7 +1167,8 @@ for tool in await session.list_tools(model="model-id", mode=Mode.AUTO):
 ```
 
 `update_settings()` accepts the same override fields for later turns.
-The four override parameters accept `set[str]`, `frozenset[str]`, or `None`.
+The four override parameters accept any iterable of tool IDs, such as a set,
+list, or tuple. Passing a bare string raises `TypeError`.
 
 `list_tools()` returns `list[ToolInfo]`.
 

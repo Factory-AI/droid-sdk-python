@@ -163,6 +163,7 @@ def document_to_wire(document: Document) -> dict[str, Any]:
             "mediaType": "text/plain",
             "data": source.data,
             "name": source.name,
+            "mime": source.mime,
         }
     assert isinstance(source, PdfDocumentSource)
     return {
@@ -315,16 +316,22 @@ def settings_update_from_wire(
         additional_tools=(
             None
             if value.additional_tool_ids is None
-            else set(value.additional_tool_ids)
+            else frozenset(value.additional_tool_ids)
         ),
         enabled_tools=(
-            None if value.enabled_tool_ids is None else set(value.enabled_tool_ids)
+            None
+            if value.enabled_tool_ids is None
+            else frozenset(value.enabled_tool_ids)
         ),
         disabled_tools=(
-            None if value.disabled_tool_ids is None else set(value.disabled_tool_ids)
+            None
+            if value.disabled_tool_ids is None
+            else frozenset(value.disabled_tool_ids)
         ),
         restrict_tools=(
-            None if value.restrict_tool_ids is None else set(value.restrict_tool_ids)
+            None
+            if value.restrict_tool_ids is None
+            else frozenset(value.restrict_tool_ids)
         ),
         compaction_threshold_check_enabled=value.compaction_threshold_check_enabled,
     )

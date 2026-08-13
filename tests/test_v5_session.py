@@ -309,6 +309,23 @@ async def test_session_updates_and_merges_settings_notifications() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_settings_accepts_iterables_and_rejects_strings() -> None:
+    session = Session(runtime=runtime())
+    await session.open()
+    client = FakeClient.instances[0]
+
+    await session.update_settings(disabled_tools=["Execute", "Edit"])
+    assert client.update_calls[-1]["disabled_tool_ids"] == ["Edit", "Execute"]
+    assert session.settings.disabled_tools == frozenset({"Execute", "Edit"})
+
+    calls_before = len(client.update_calls)
+    with pytest.raises(TypeError, match="disabled_tools"):
+        await session.update_settings(disabled_tools="Execute")
+    assert len(client.update_calls) == calls_before
+    await session.close()
+
+
+@pytest.mark.asyncio
 async def test_session_maps_missing_executable_and_cleans_up() -> None:
     FakeClient.fail_connect = True
     session = Session(runtime=runtime())
@@ -579,9 +596,9 @@ async def test_stream_serializes_text_and_pdf_through_wire_models() -> None:
             "mediaType": "text/plain",
             "data": "notes",
             "name": "notes.txt",
+            "mime": "application/x-high-level-only",
         }
         assert wire[1]["mediaType"] == "application/pdf"
-        assert "mime" not in wire[0]
     await session.close()
 
 

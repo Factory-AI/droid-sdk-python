@@ -36,6 +36,7 @@ from droid_sdk._high_level.config import (
     SessionSettings,
     SessionSource,
     SessionTag,
+    freeze_tool_ids,
 )
 from droid_sdk._high_level.enums import (
     ReasoningEffort,
@@ -83,7 +84,7 @@ from droid_sdk.schemas.enums import (
 from droid_sdk.transport import ProcessTransport
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -169,11 +170,12 @@ class Session(SessionOperationsMixin):
         mcp_servers: Sequence[McpServerConfig] = (),
         runtime: Runtime | None = None,
         api_key: str | None = None,
-        disabled_tools: set[str] | frozenset[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
         auto_reject_permission_requests: bool | None = None,
         disable_builtin_skills: bool | None = None,
         session_source: SessionSource | None = None,
     ) -> Session:
+        disabled_tools = freeze_tool_ids("disabled_tools", disabled_tools)
         value = cls(
             interactions=interactions,
             runtime=runtime,

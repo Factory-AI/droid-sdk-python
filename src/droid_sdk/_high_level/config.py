@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,11 +34,24 @@ _TOOL_SET_FIELDS = (
 )
 
 
+def freeze_tool_ids(name: str, items: Iterable[str] | None) -> frozenset[str] | None:
+    """Freeze a tool-ID iterable, rejecting a bare string.
+
+    A string is iterable, so ``frozenset("Execute")`` would silently become a
+    set of single characters.
+    """
+    if items is None:
+        return None
+    if isinstance(items, str):
+        raise TypeError(f"{name} takes an iterable of tool IDs, not a string")
+    return frozenset(items)
+
+
 def _freeze_tool_sets(value: object) -> None:
     for name in _TOOL_SET_FIELDS:
         items = getattr(value, name)
         if items is not None:
-            object.__setattr__(value, name, frozenset(items))
+            object.__setattr__(value, name, freeze_tool_ids(name, items))
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,10 +121,10 @@ class SessionConfig:
     session_source: SessionSource | None = None
     auto_reject_permission_requests: bool | None = None
     disable_builtin_skills: bool | None = None
-    additional_tools: set[str] | frozenset[str] | None = None
-    enabled_tools: set[str] | frozenset[str] | None = None
-    disabled_tools: set[str] | frozenset[str] | None = None
-    restrict_tools: set[str] | frozenset[str] | None = None
+    additional_tools: Iterable[str] | None = None
+    enabled_tools: Iterable[str] | None = None
+    disabled_tools: Iterable[str] | None = None
+    restrict_tools: Iterable[str] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mcp_servers", tuple(self.mcp_servers))
@@ -129,10 +142,10 @@ class SessionSettings:
     spec_reasoning_effort: ReasoningEffort | None = None
     tags: Sequence[SessionTag] = ()
     sandbox: SandboxSettings | None = None
-    additional_tools: set[str] | frozenset[str] | None = None
-    enabled_tools: set[str] | frozenset[str] | None = None
-    disabled_tools: set[str] | frozenset[str] | None = None
-    restrict_tools: set[str] | frozenset[str] | None = None
+    additional_tools: frozenset[str] | None = None
+    enabled_tools: frozenset[str] | None = None
+    disabled_tools: frozenset[str] | None = None
+    restrict_tools: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tags", tuple(self.tags))
@@ -150,10 +163,10 @@ class SessionSettingsUpdate:
     spec_model: str | None = None
     spec_reasoning_effort: ReasoningEffort | None = None
     tags: Sequence[SessionTag] | None = None
-    additional_tools: set[str] | frozenset[str] | None = None
-    enabled_tools: set[str] | frozenset[str] | None = None
-    disabled_tools: set[str] | frozenset[str] | None = None
-    restrict_tools: set[str] | frozenset[str] | None = None
+    additional_tools: frozenset[str] | None = None
+    enabled_tools: frozenset[str] | None = None
+    disabled_tools: frozenset[str] | None = None
+    restrict_tools: frozenset[str] | None = None
     compaction_threshold_check_enabled: bool | None = None
 
     def __post_init__(self) -> None:

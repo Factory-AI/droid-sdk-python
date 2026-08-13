@@ -22,7 +22,11 @@ from droid_sdk._high_level._convert import (
     wire_reasoning,
     wire_tags,
 )
-from droid_sdk._high_level.config import SessionSettings, UpdateSettingsResult
+from droid_sdk._high_level.config import (
+    SessionSettings,
+    UpdateSettingsResult,
+    freeze_tool_ids,
+)
 from droid_sdk._high_level.enums import ContextAccuracy, Mode
 from droid_sdk._high_level.extensions import (
     CompactOutcome,
@@ -54,7 +58,7 @@ from droid_sdk.schemas.enums import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from droid_sdk._high_level.config import SessionTag
     from droid_sdk._high_level.enums import Autonomy, ReasoningEffort
@@ -105,12 +109,16 @@ class SessionOperationsMixin:
         tags: Sequence[SessionTag] | None = None,
         compaction_token_limit: int | None = None,
         compaction_threshold_check_enabled: bool | None = None,
-        additional_tools: set[str] | frozenset[str] | None = None,
-        enabled_tools: set[str] | frozenset[str] | None = None,
-        disabled_tools: set[str] | frozenset[str] | None = None,
-        restrict_tools: set[str] | frozenset[str] | None = None,
+        additional_tools: Iterable[str] | None = None,
+        enabled_tools: Iterable[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
+        restrict_tools: Iterable[str] | None = None,
     ) -> UpdateSettingsResult:
         self._ensure_active()
+        additional_tools = freeze_tool_ids("additional_tools", additional_tools)
+        enabled_tools = freeze_tool_ids("enabled_tools", enabled_tools)
+        disabled_tools = freeze_tool_ids("disabled_tools", disabled_tools)
+        restrict_tools = freeze_tool_ids("restrict_tools", restrict_tools)
         spec_model_value = None if isinstance(spec_model, _Unset) else spec_model
         spec_reasoning_value = (
             None if isinstance(spec_reasoning_effort, _Unset) else spec_reasoning_effort
@@ -147,7 +155,7 @@ class SessionOperationsMixin:
             ("restrict_tools", restrict_tools),
         ):
             if value is not None:
-                self._load_options[key] = frozenset(value)
+                self._load_options[key] = value
         current = self.settings
         self._settings = SessionSettings(
             model=current.model if model is None else model,
@@ -196,13 +204,17 @@ class SessionOperationsMixin:
         mode: Mode | None = None,
         autonomy: Autonomy | None = None,
         spec_model: str | None = None,
-        additional_tools: set[str] | frozenset[str] | None = None,
-        enabled_tools: set[str] | frozenset[str] | None = None,
-        disabled_tools: set[str] | frozenset[str] | None = None,
-        restrict_tools: set[str] | frozenset[str] | None = None,
+        additional_tools: Iterable[str] | None = None,
+        enabled_tools: Iterable[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
+        restrict_tools: Iterable[str] | None = None,
         skip_permissions_unsafe: bool | None = None,
     ) -> list[ToolInfo]:
         self._ensure_active()
+        additional_tools = freeze_tool_ids("additional_tools", additional_tools)
+        enabled_tools = freeze_tool_ids("enabled_tools", enabled_tools)
+        disabled_tools = freeze_tool_ids("disabled_tools", disabled_tools)
+        restrict_tools = freeze_tool_ids("restrict_tools", restrict_tools)
         result = await self._require_client().list_tools(
             model_id=model,
             interaction_mode=(

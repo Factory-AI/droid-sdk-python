@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
@@ -12,6 +12,7 @@ from droid_sdk._high_level._immutable import (
     freeze_json_object,
     freeze_secret_mapping,
 )
+from droid_sdk._high_level.config import freeze_tool_ids
 from droid_sdk._high_level.enums import (
     Autonomy,
     McpServerStatus,
@@ -45,10 +46,10 @@ class ListToolsOptions:
     mode: Mode | None = None
     autonomy: Autonomy | None = None
     spec_model: str | None = None
-    additional_tools: set[str] | frozenset[str] | None = None
-    enabled_tools: set[str] | frozenset[str] | None = None
-    disabled_tools: set[str] | frozenset[str] | None = None
-    restrict_tools: set[str] | frozenset[str] | None = None
+    additional_tools: Iterable[str] | None = None
+    enabled_tools: Iterable[str] | None = None
+    disabled_tools: Iterable[str] | None = None
+    restrict_tools: Iterable[str] | None = None
     skip_permissions_unsafe: bool | None = None
 
     def __post_init__(self) -> None:
@@ -60,7 +61,7 @@ class ListToolsOptions:
         ):
             value = getattr(self, name)
             if value is not None:
-                object.__setattr__(self, name, frozenset(value))
+                object.__setattr__(self, name, freeze_tool_ids(name, value))
 
 
 @dataclass(frozen=True, slots=True)
