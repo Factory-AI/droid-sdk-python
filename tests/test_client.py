@@ -16,6 +16,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from pydantic import ValidationError
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -27,7 +28,13 @@ from droid_sdk.errors import (
     SessionNotFoundError,
 )
 from droid_sdk.protocol import SESSION_INIT_TIMEOUT
-from droid_sdk.schemas.enums import DroidServerMethod, JsonRpcErrorCode
+from droid_sdk.schemas.client import Base64ImageSource
+from droid_sdk.schemas.enums import (
+    DroidServerMethod,
+    JsonRpcErrorCode,
+    SettingsLevel,
+)
+from droid_sdk.schemas.messages import DocumentSourceType, PlainTextSource
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -197,6 +204,77 @@ async def create_client_with_session() -> tuple[Any, MockTransport]:
     await task
 
     return client, transport
+
+
+class TestCanonicalV5Mutations:
+    """Coverage for v5 mutation methods added to the raw client."""
+
+    @pytest.mark.asyncio
+    async def test_submit_mcp_auth_error(self) -> None:
+        client, transport = await create_client_with_session()
+        task = asyncio.create_task(
+            client.submit_mcp_auth_error(
+                server_name="oauth-server",
+                error="access_denied",
+                error_description="User denied access",
+                state="state-1",
+            )
+        )
+        await asyncio.sleep(0.01)
+        request = transport.get_last_sent_parsed()
+        assert request["method"] == "droid.submit_mcp_auth_error"
+        assert request["params"] == {
+            "serverName": "oauth-server",
+            "error": "access_denied",
+            "errorDescription": "User denied access",
+            "state": "state-1",
+        }
+        transport.inject_message(
+            make_success_response(request["id"], {"success": True})
+        )
+        result = await task
+        assert result.success is True
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_session_start_mcp_configs_are_validated_before_send() -> None:
+    client, transport = await create_connected_client()
+    invalid = [{"name": "bad", "url": "relative", "type": "http"}]
+
+    with pytest.raises(ValidationError):
+        await client.initialize_session(
+            cwd="/repo",
+            machine_id=None,
+            mcp_servers=invalid,
+        )
+    with pytest.raises(ValidationError):
+        await client.load_session(session_id="session", mcp_servers=invalid)
+    assert transport.sent_messages == []
+
+
+@pytest.mark.asyncio
+async def test_set_skill_disabled() -> None:
+    client, transport = await create_client_with_session()
+    task = asyncio.create_task(
+        client.set_skill_disabled(
+            skill_name="example-skill",
+            disabled=True,
+            settings_level=SettingsLevel.Project,
+        )
+    )
+    await asyncio.sleep(0.01)
+    request = transport.get_last_sent_parsed()
+    assert request["method"] == "droid.set_skill_disabled"
+    assert request["params"] == {
+        "skillName": "example-skill",
+        "disabled": True,
+        "settingsLevel": "project",
+    }
+    transport.inject_message(make_success_response(request["id"], {"success": True}))
+    result = await task
+    assert result.success is True
+    await client.close()
 
 
 # ============================================================
@@ -604,6 +682,28 @@ class TestAddUserMessage:
         await task
 
     @pytest.mark.asyncio
+    async def test_sends_explicit_null_fields(self) -> None:
+        """Explicit null fields clear nullable settings on the wire."""
+        client, transport = await create_client_with_session()
+
+        task = asyncio.create_task(
+            client.update_session_settings(
+                explicit_null_fields=[
+                    "specModeModelId",
+                    "specModeReasoningEffort",
+                ]
+            )
+        )
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["params"]["specModeModelId"] is None
+        assert sent["params"]["specModeReasoningEffort"] is None
+
+        transport.inject_message(make_success_response(sent["id"], {}))
+        await task
+
+    @pytest.mark.asyncio
     async def test_sends_images_and_files(self) -> None:
         """add_user_message sends images and files."""
         client, transport = await create_client_with_session()
@@ -633,6 +733,78 @@ class TestAddUserMessage:
 
         transport.inject_message(make_success_response(sent["id"], {}))
         await task
+
+    @pytest.mark.asyncio
+    async def test_sends_message_id_and_typed_attachments(self) -> None:
+        """Typed attachments serialize to JSON-safe wire aliases."""
+        client, transport = await create_client_with_session()
+
+        async def do_msg() -> Any:
+            return await client.add_user_message(
+                text="See attached",
+                message_id="message-1",
+                images=[
+                    Base64ImageSource(
+                        type="base64",
+                        data="abc123",
+                        media_type="image/png",
+                    )
+                ],
+                files=[
+                    PlainTextSource(
+                        type=DocumentSourceType.Text,
+                        media_type="text/plain",
+                        data="notes",
+                        name="notes.txt",
+                    )
+                ],
+            )
+
+        task = asyncio.create_task(do_msg())
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["params"] == {
+            "messageId": "message-1",
+            "text": "See attached",
+            "images": [
+                {
+                    "type": "base64",
+                    "data": "abc123",
+                    "mediaType": "image/png",
+                }
+            ],
+            "files": [
+                {
+                    "type": "text",
+                    "mediaType": "text/plain",
+                    "data": "notes",
+                    "name": "notes.txt",
+                }
+            ],
+        }
+
+        transport.inject_message(make_success_response(sent["id"], {}))
+        await task
+
+    @pytest.mark.asyncio
+    async def test_complete_message_payload_is_validated_before_send(self) -> None:
+        client, transport = await create_client_with_session()
+        sent_before = len(transport.sent_messages)
+
+        with pytest.raises(ValidationError):
+            await client.add_user_message(
+                text="invalid",
+                images=[
+                    {
+                        "type": "base64",
+                        "data": "abc123",
+                        "mediaType": "image/png",
+                        "unsupported": True,
+                    }
+                ],
+            )
+        assert len(transport.sent_messages) == sent_before
 
     @pytest.mark.asyncio
     async def test_supports_custom_request_id(self) -> None:

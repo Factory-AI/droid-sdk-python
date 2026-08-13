@@ -20,20 +20,21 @@ import asyncio
 import contextlib
 import json
 import logging
+import time
 import uuid
-from collections.abc import Callable  # noqa: TC003
-from typing import Any, Final
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Final, cast
+
+from pydantic import BaseModel
 
 from droid_sdk.errors import (
-    ConnectionError as DroidConnectionError,
-)
-from droid_sdk.errors import (
-    DroidClientError,
-    ProtocolError,
+    DroidConnectionError,
+    DroidError,
+    DroidProtocolError,
+    InvalidWorkingDirectoryError,
+    RunTimeoutError,
     SessionNotFoundError,
-)
-from droid_sdk.errors import (
-    TimeoutError as DroidTimeoutError,
 )
 from droid_sdk.schemas.constants import (
     FACTORY_PROTOCOL_VERSION,
@@ -44,6 +45,20 @@ from droid_sdk.schemas.enums import JsonRpcErrorCode
 from droid_sdk.types import DroidClientTransport  # noqa: TC001
 
 logger = logging.getLogger(__name__)
+
+TraceMetaInjector = Callable[[dict[str, str]], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ProtocolTiming:
+    """Content-free completion timing for a JSON-RPC method."""
+
+    method: str
+    duration_seconds: float
+    outcome: str
+
+
+ProtocolTimingCallback = Callable[[ProtocolTiming], None]
 
 # Timeout constants (in seconds, matching TypeScript SDK)
 DEFAULT_REQUEST_TIMEOUT: Final[float] = 30.0
@@ -94,9 +109,13 @@ class ProtocolEngine:
         *,
         transport: DroidClientTransport,
         default_timeout: float = DEFAULT_REQUEST_TIMEOUT,
+        trace_meta_injector: TraceMetaInjector | None = None,
+        timing_callback: ProtocolTimingCallback | None = None,
     ) -> None:
         self._transport = transport
         self._default_timeout = default_timeout
+        self._trace_meta_injector = trace_meta_injector
+        self._timing_callback = timing_callback
 
         # Pending requests keyed by UUID string
         self._pending_requests: dict[str, _PendingRequest] = {}
@@ -106,6 +125,7 @@ class ProtocolEngine:
 
         # Notification listeners
         self._notification_listeners: list[Callable[[dict[str, Any]], None]] = []
+        self._error_listeners: list[Callable[[Exception], None]] = []
 
         # Server→client request handlers
         self._permission_handler: Callable[[dict[str, Any]], Any] | None = None
@@ -132,6 +152,16 @@ class ProtocolEngine:
         to the appropriate handler.
         """
         self._reader_task = asyncio.create_task(self._read_loop())
+
+    def on_error(self, callback: Callable[[Exception], None]) -> Callable[[], None]:
+        """Subscribe to terminal transport errors."""
+        self._error_listeners.append(callback)
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._error_listeners.remove(callback)
+
+        return unsubscribe
 
     async def _read_loop(self) -> None:
         """Consume messages from the transport iterator."""
@@ -176,13 +206,16 @@ class ProtocolEngine:
             DroidConnectionError: If transport is not connected.
             DroidClientError: If the engine is closed or a sticky error exists.
         """
+        started_at = time.monotonic()
         # Check closed state
         if self._closed:
-            raise DroidClientError("Protocol engine is closed")
+            self._record_timing(method, started_at, "connection_error")
+            raise DroidConnectionError("Protocol engine is closed")
 
         # Check sticky transport error
         if self._transport_error is not None:
-            raise DroidClientError(f"Transport error: {self._transport_error}")
+            self._record_timing(method, started_at, "connection_error")
+            raise self._transport_error
 
         effective_timeout = timeout if timeout is not None else self._default_timeout
 
@@ -198,6 +231,23 @@ class ProtocolEngine:
             "method": method,
             "params": params,
         }
+        if self._trace_meta_injector is not None:
+            carrier: dict[str, str] = {}
+            try:
+                self._trace_meta_injector(carrier)
+            except Exception as exc:
+                logger.debug(
+                    "Trace metadata injector failed: exception_type=%s",
+                    type(exc).__name__,
+                )
+            else:
+                safe_meta = {
+                    key: value
+                    for key, value in carrier.items()
+                    if key in {"traceparent", "tracestate"}
+                }
+                if safe_meta:
+                    envelope["_meta"] = safe_meta
 
         # Create future
         loop = asyncio.get_running_loop()
@@ -212,10 +262,15 @@ class ProtocolEngine:
         # Send via transport
         try:
             await self._transport.send(json.dumps(envelope))
+        except asyncio.CancelledError:
+            self._pending_requests.pop(request_id, None)
+            self._record_timing(method, started_at, "cancelled")
+            raise
         except Exception as send_exc:
             # Clean up pending and re-raise
             self._pending_requests.pop(request_id, None)
-            if isinstance(send_exc, DroidClientError):
+            self._record_timing(method, started_at, "connection_error")
+            if isinstance(send_exc, DroidError):
                 raise
             raise DroidConnectionError(
                 f"Failed to send request: {send_exc}"
@@ -226,12 +281,26 @@ class ProtocolEngine:
             response = await asyncio.wait_for(future, timeout=effective_timeout)
         except asyncio.TimeoutError:
             self._pending_requests.pop(request_id, None)
-            raise DroidTimeoutError(
+            self._record_timing(method, started_at, "timeout")
+            raise RunTimeoutError(
                 f"Request {method} timed out after {effective_timeout}s",
                 request_id=request_id,
                 method=method,
                 timeout_duration=effective_timeout,
             ) from None
+        except asyncio.CancelledError:
+            self._pending_requests.pop(request_id, None)
+            self._record_timing(method, started_at, "cancelled")
+            raise
+        except Exception:
+            self._record_timing(method, started_at, "error")
+            raise
+
+        self._record_timing(
+            method,
+            started_at,
+            "error" if response.get("error") is not None else "success",
+        )
 
         # Check for error response and map to exceptions
         if "error" in response and response["error"] is not None:
@@ -240,21 +309,34 @@ class ProtocolEngine:
             # Guard against non-dict error payloads
             if not isinstance(error_obj, dict):
                 obj_type = type(error_obj).__name__
-                raise ProtocolError(
+                raise DroidProtocolError(
                     f"Malformed error response: expected dict, got {obj_type}",
                     code=JsonRpcErrorCode.PARSE_ERROR.value,
                 )
 
-            code = error_obj.get("code")
-            message = error_obj.get("message", "Unknown error")
-            data = error_obj.get("data")
+            typed_error = cast("dict[str, Any]", error_obj)
+            raw_code = typed_error.get("code")
+            code = raw_code if isinstance(raw_code, int) else None
+            message = str(typed_error.get("message", "Unknown error"))
+            data: Any = typed_error.get("data")
 
-            if code == JsonRpcErrorCode.ENTITY_NOT_FOUND.value:
+            if (
+                code == JsonRpcErrorCode.ENTITY_NOT_FOUND.value
+                and method == "droid.load_session"
+            ):
                 # Extract session_id from params if available
                 session_id = params.get("sessionId", request_id)
                 raise SessionNotFoundError(str(session_id))
 
-            raise ProtocolError(
+            if (
+                code == JsonRpcErrorCode.INVALID_PARAMS.value
+                and method == "droid.initialize_session"
+                and "cwd" in params
+                and _looks_like_invalid_cwd(message, data)
+            ):
+                raise InvalidWorkingDirectoryError(str(params["cwd"]), message)
+
+            raise DroidProtocolError(
                 message,
                 code=code,
                 data=data,
@@ -348,7 +430,9 @@ class ProtocolEngine:
             self._reader_task = None
 
         # Reject all pending
-        error = DroidClientError("Protocol engine closed: pending requests cancelled")
+        error = DroidConnectionError(
+            "Protocol engine closed: pending requests cancelled"
+        )
         self._reject_all_pending(error)
 
         # Cancel all in-flight server→client request handler tasks
@@ -444,7 +528,7 @@ class ProtocolEngine:
             # Malformed response — reject with ProtocolError
             if not pending.future.done():
                 pending.future.set_exception(
-                    ProtocolError(
+                    DroidProtocolError(
                         "Malformed response: missing 'result' and 'error'",
                         code=JsonRpcErrorCode.PARSE_ERROR.value,
                     )
@@ -463,10 +547,10 @@ class ProtocolEngine:
         for listener in list(self._notification_listeners):
             try:
                 listener(notification)
-            except Exception:
+            except Exception as exc:
                 logger.warning(
-                    "Notification listener raised an exception",
-                    exc_info=True,
+                    "Notification listener raised: exception_type=%s",
+                    type(exc).__name__,
                 )
 
     async def _handle_server_request(self, request: dict[str, Any]) -> None:
@@ -503,21 +587,22 @@ class ProtocolEngine:
 
         try:
             result = handler(params)
-            if asyncio.iscoroutine(result) or asyncio.isfuture(result):
-                selected_option = await result
-            else:
-                selected_option = result
+            permission_result = await _resolve_handler_result(result)
             await self._send_response(
                 request_id,
-                result={"selectedOption": selected_option},
+                result=_serialize_permission_result(permission_result),
             )
         except Exception as exc:
-            logger.warning("Permission handler raised: %s", exc, exc_info=True)
+            diagnostic = _handler_error_diagnostic(exc)
+            logger.warning(
+                "Permission handler raised: exception_type=%s",
+                diagnostic["exceptionType"],
+            )
             await self._send_error_response(
                 request_id,
                 code=JsonRpcErrorCode.INTERNAL_ERROR.value,
                 message="Failed to handle permission request",
-                data=str(exc),
+                data=diagnostic,
             )
 
     async def _handle_ask_user_request(
@@ -538,21 +623,22 @@ class ProtocolEngine:
 
         try:
             result = handler(params)
-            if asyncio.iscoroutine(result) or asyncio.isfuture(result):
-                ask_result = await result
-            else:
-                ask_result = result
+            ask_result = await _resolve_handler_result(result)
             await self._send_response(
                 request_id,
-                result=ask_result,
+                result=_serialize_question_result(ask_result),
             )
         except Exception as exc:
-            logger.warning("Ask-user handler raised: %s", exc, exc_info=True)
+            diagnostic = _handler_error_diagnostic(exc)
+            logger.warning(
+                "Ask-user handler raised: exception_type=%s",
+                diagnostic["exceptionType"],
+            )
             await self._send_error_response(
                 request_id,
                 code=JsonRpcErrorCode.INTERNAL_ERROR.value,
                 message="Failed to handle ask-user request",
-                data=str(exc),
+                data=diagnostic,
             )
 
     # ----------------------------------------------------------
@@ -564,8 +650,40 @@ class ProtocolEngine:
 
         Sets the sticky transport error and rejects all pending requests.
         """
-        self._transport_error = error
-        self._reject_all_pending(DroidClientError(f"Transport error: {error}"))
+        connection_error = (
+            error
+            if isinstance(error, DroidError)
+            else DroidConnectionError(f"Transport error: {error}")
+        )
+        self._transport_error = connection_error
+        self._reject_all_pending(connection_error)
+        for callback in list(self._error_listeners):
+            try:
+                callback(connection_error)
+            except Exception as exc:
+                logger.warning(
+                    "Protocol error listener raised: exception_type=%s",
+                    type(exc).__name__,
+                )
+
+    def _record_timing(self, method: str, started_at: float, outcome: str) -> None:
+        """Invoke the content-free timing callback on a best-effort basis."""
+        callback = self._timing_callback
+        if callback is None:
+            return
+        try:
+            callback(
+                ProtocolTiming(
+                    method=method,
+                    duration_seconds=max(0.0, time.monotonic() - started_at),
+                    outcome=outcome,
+                )
+            )
+        except Exception as exc:
+            logger.debug(
+                "Protocol timing callback failed: exception_type=%s",
+                type(exc).__name__,
+            )
 
     # ----------------------------------------------------------
     # Internal: Response helpers
@@ -587,11 +705,11 @@ class ProtocolEngine:
         }
         try:
             await self._transport.send(json.dumps(response))
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "Failed to send response for request %s",
+                "Failed to send response for request %s: exception_type=%s",
                 request_id,
-                exc_info=True,
+                type(exc).__name__,
             )
 
     async def _send_error_response(
@@ -616,11 +734,11 @@ class ProtocolEngine:
         }
         try:
             await self._transport.send(json.dumps(response))
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "Failed to send error response for request %s",
+                "Failed to send error response for request %s: exception_type=%s",
                 request_id,
-                exc_info=True,
+                type(exc).__name__,
             )
 
     def _reject_all_pending(self, error: Exception) -> None:
@@ -633,10 +751,68 @@ class ProtocolEngine:
                 req.future.set_exception(error)
 
 
+def _looks_like_invalid_cwd(message: Any, data: Any) -> bool:
+    """Return whether an INVALID_PARAMS response identifies the cwd."""
+    description = f"{message} {data}".lower()
+    return any(
+        marker in description
+        for marker in ("cwd", "working directory", "working_directory")
+    )
+
+
+def _handler_error_diagnostic(error: Exception) -> dict[str, str]:
+    """Return content-free diagnostics safe for logs and JSON-RPC responses."""
+    return {"exceptionType": type(error).__name__}
+
+
+def _model_dump(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, BaseModel):
+        return None
+    return value.model_dump(by_alias=True, exclude_none=True)
+
+
+async def _resolve_handler_result(value: Any) -> Any:
+    if asyncio.iscoroutine(value) or asyncio.isfuture(value):
+        return await value
+    return value
+
+
+def _serialize_permission_result(value: Any) -> dict[str, Any]:
+    """Serialize legacy outcomes and complete permission response models."""
+    model_result = _model_dump(value)
+    if model_result is not None:
+        return model_result
+    if isinstance(value, dict):
+        result = dict(cast("dict[str, Any]", value))
+        aliases = {
+            "selected_option": "selectedOption",
+            "edited_spec_content": "editedSpecContent",
+        }
+        for python_name, wire_name in aliases.items():
+            if python_name in result:
+                result[wire_name] = result.pop(python_name)
+        return result
+    selected_option = getattr(value, "value", value)
+    return {"selectedOption": selected_option}
+
+
+def _serialize_question_result(value: Any) -> dict[str, Any]:
+    """Serialize complete ask-user response dictionaries or Pydantic models."""
+    model_result = _model_dump(value)
+    if model_result is not None:
+        return model_result
+    if isinstance(value, dict):
+        return dict(cast("dict[str, Any]", value))
+    raise TypeError("Ask-user handler must return a response mapping")
+
+
 __all__ = [
     "COMPACTION_TIMEOUT",
     "DEFAULT_REQUEST_TIMEOUT",
     "MCP_AUTH_TIMEOUT",
     "SESSION_INIT_TIMEOUT",
     "ProtocolEngine",
+    "ProtocolTiming",
+    "ProtocolTimingCallback",
+    "TraceMetaInjector",
 ]

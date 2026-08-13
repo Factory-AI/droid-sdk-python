@@ -1,6 +1,8 @@
+# pyright: reportIncompatibleVariableOverride=false
+
 """Client→server request/response Pydantic schemas for the Factory Droid protocol.
 
-All 29 client→server RPC method request/response pairs, plus supporting types
+All supported client→server RPC method request/response pairs, plus supporting types
 and the ClientRequest discriminated union.
 
 Ported from TypeScript source:
@@ -9,20 +11,38 @@ Ported from TypeScript source:
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    field_validator,
+    model_validator,
+)
 
-from droid_sdk.schemas.enums import (  # noqa: TC001
+from droid_sdk.schemas.cli import (
+    AskUserRequestParams,
+    RequestPermissionRequestParams,
+)
+from droid_sdk.schemas.enums import (
     AutonomyLevel,
     AutonomyMode,
+    ContextStatsAccuracy,
     DecompSessionType,
     DroidInteractionMode,
     DroidServerMethod,
+    DroidWorkingState,
+    McpOAuthTokenEndpointAuthMethod,
     McpServerType,
     MissionState,
     ModelProvider,
     ReasoningEffort,
+    SandboxMode,
+    SessionPlatform,
     SettingsLevel,
     SkillLocation,
 )
@@ -32,9 +52,18 @@ from droid_sdk.schemas.mcp import (  # noqa: TC001
     McpStatusSummary,
     McpToolInfo,
 )
+from droid_sdk.schemas.messages import (
+    DocumentSource,
+    FactoryDroidMessage,
+)
 from droid_sdk.schemas.mission import (  # noqa: TC001
     MissionFeature,
     ProgressLogEntry,
+)
+from droid_sdk.schemas.session import (
+    LastCallTokenUsage,
+    SessionTag,
+    TokenUsage,
 )
 from droid_sdk.schemas.shared import (
     JsonRpcRequest,
@@ -42,7 +71,12 @@ from droid_sdk.schemas.shared import (
     JsonRpcResponseSuccess,
 )
 
-__all__ = [
+_MCP_OAUTH_CLIENT_METADATA_DOT_SEGMENT_RE = re.compile(
+    r"(?:^|/)(?:\.\.|\.(?:%2e)?|%2e(?:\.|%2e)?)(?:/|$|[?#])",
+    re.IGNORECASE,
+)
+
+__all__ = [  # noqa: RUF022
     # Request schemas
     "AddMcpServerRequest",
     # Supporting types
@@ -148,8 +182,12 @@ __all__ = [
     "LoadSessionRequestParams",
     "LoadSessionResponse",
     "LoadSessionResult",
+    "McpOAuthOptions",
     "MissionSnapshot",
     "OutputFormat",
+    "PendingAskUserRequest",
+    "PendingPermissionRequest",
+    "QueuedUserMessage",
     "RemoveMcpServerRequest",
     "RemoveMcpServerRequestParams",
     "RemoveMcpServerResponse",
@@ -161,8 +199,27 @@ __all__ = [
     "RewindEvictedFile",
     "RewindFileCreation",
     "RewindFileSnapshot",
+    "SandboxStatus",
     "SessionSettings",
+    "SessionData",
     "SessionSource",
+    "SessionPlatform",
+    "SlackSessionSource",
+    "WebSessionSource",
+    "ApiSessionSource",
+    "SessionsApiSessionSource",
+    "LinearSessionSource",
+    "JiraSessionSource",
+    "MicrosoftTeamsSessionSource",
+    "ReadinessRemediationSessionSource",
+    "ReadinessEvaluationSessionSource",
+    "AutomationSessionSource",
+    "WikiGenerationSessionSource",
+    "WikiCISetupSessionSource",
+    "TuiSessionSource",
+    "DesktopSessionSource",
+    "AcpSessionSource",
+    "UnknownSessionSource",
     "SessionTag",
     "SkillInfo",
     "SkillResource",
@@ -176,6 +233,14 @@ __all__ = [
     "SubmitMcpAuthCodeRequestParams",
     "SubmitMcpAuthCodeResponse",
     "SubmitMcpAuthCodeResult",
+    "SubmitMcpAuthErrorRequest",
+    "SubmitMcpAuthErrorRequestParams",
+    "SubmitMcpAuthErrorResponse",
+    "SubmitMcpAuthErrorResult",
+    "SetSkillDisabledRequest",
+    "SetSkillDisabledRequestParams",
+    "SetSkillDisabledResponse",
+    "SetSkillDisabledResult",
     "ToggleMcpServerRequest",
     "ToggleMcpServerRequestParams",
     "ToggleMcpServerResponse",
@@ -215,30 +280,6 @@ class Base64ImageSource(BaseModel):
     """MIME type of the image."""
 
 
-class DocumentSource(BaseModel):
-    """Document source for user messages (PDF or plain text).
-
-    Simplified schema — captures all document source fields.
-    """
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    type: str
-    """Document source type ('base64' for PDF, 'text' for plain text)."""
-
-    media_type: str = Field(alias="mediaType")
-    """MIME type (e.g., 'application/pdf', 'text/plain')."""
-
-    data: str
-    """Document data (base64-encoded for PDF, raw text for plain text)."""
-
-    name: str | None = None
-    """Optional file name."""
-
-    mime: str | None = None
-    """Optional additional MIME type info."""
-
-
 class OutputFormat(BaseModel):
     """Structured-output contract for a user message or session.
 
@@ -253,18 +294,6 @@ class OutputFormat(BaseModel):
 
     schema_: dict[str, Any] = Field(alias="schema")
     """JSON Schema describing the required output shape."""
-
-
-class SessionTag(BaseModel):
-    """Session tag metadata."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    name: str
-    """Tag name."""
-
-    metadata: dict[str, str] | None = None
-    """Optional key-value metadata."""
 
 
 class RewindFileSnapshot(BaseModel):
@@ -303,17 +332,149 @@ class RewindEvictedFile(BaseModel):
     """Why the file cannot be restored."""
 
 
-class SessionSource(BaseModel):
-    """Session source information.
-
-    Simplified schema that accepts any session source platform.
-    Uses ``extra='allow'`` to accept platform-specific fields.
-    """
+class _SessionSourceBase(BaseModel):
+    """Base for authority-recognized session source variants."""
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    platform: str
-    """Source platform identifier (e.g. 'slack', 'web', 'api', 'linear')."""
+
+class SlackSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Slack]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+    team_id: str | None = Field(default=None, alias="teamId")
+    channel: str | None = None
+    thread_ts: str | None = Field(default=None, alias="threadTs")
+    user_id: str | None = Field(default=None, alias="userId")
+    automation_id: str | None = Field(default=None, alias="automationId")
+
+
+class WebSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Web]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+
+
+class ApiSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Api]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+
+
+class SessionsApiSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.SessionsApi]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+
+
+class LinearSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Linear]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+    agent_session_id: str = Field(alias="agentSessionId")
+    issue_id: str | None = Field(default=None, alias="issueId")
+    issue_url: str | None = Field(default=None, alias="issueUrl")
+    issue_identifier: str | None = Field(default=None, alias="issueIdentifier")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    user_id: str | None = Field(default=None, alias="userId")
+
+
+class JiraSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Jira]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+    cloud_id: str = Field(alias="cloudId")
+    issue_id: str = Field(alias="issueId")
+    issue_key: str | None = Field(default=None, alias="issueKey")
+    site_id: str | None = Field(default=None, alias="siteId")
+    project_id: str | None = Field(default=None, alias="projectId")
+    comment_id: str | None = Field(default=None, alias="commentId")
+    user_id: str | None = Field(default=None, alias="userId")
+    task_id: str | None = Field(default=None, alias="taskId")
+
+
+class MicrosoftTeamsSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.MicrosoftTeams]
+    delegation_session_id: str = Field(alias="delegationSessionId")
+    tenant_id: str = Field(alias="tenantId")
+    conversation_id: str = Field(alias="conversationId")
+    service_url: str = Field(alias="serviceUrl")
+    conversation_type: Literal["personal", "groupChat", "channel"] | None = Field(
+        default=None, alias="conversationType"
+    )
+    root_message_id: str | None = Field(default=None, alias="rootMessageId")
+    team_id: str | None = Field(default=None, alias="teamId")
+    channel_id: str | None = Field(default=None, alias="channelId")
+    user_id: str | None = Field(default=None, alias="userId")
+    aad_object_id: str | None = Field(default=None, alias="aadObjectId")
+
+
+class ReadinessRemediationSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.ReadinessRemediation]
+    report_id: str = Field(alias="reportId")
+    repo_url: str = Field(alias="repoUrl")
+    criterion_id: str = Field(alias="criterionId")
+
+
+class ReadinessEvaluationSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.ReadinessEvaluation]
+    repo_url: str = Field(alias="repoUrl")
+
+
+class AutomationSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Automation]
+    automation_id: str = Field(alias="automationId")
+    computer_id: str = Field(alias="computerId")
+
+
+class WikiGenerationSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.WikiGeneration]
+    repo_url: str = Field(alias="repoUrl")
+
+
+class WikiCISetupSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.WikiCISetup]
+    repo_url: str = Field(alias="repoUrl")
+
+
+class TuiSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Tui]
+
+
+class DesktopSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Desktop]
+
+
+class AcpSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Acp]
+
+
+class UnknownSessionSource(_SessionSourceBase):
+    platform: Literal[SessionPlatform.Unknown]
+
+
+SessionSourceUnion = Annotated[
+    SlackSessionSource
+    | WebSessionSource
+    | ApiSessionSource
+    | SessionsApiSessionSource
+    | LinearSessionSource
+    | JiraSessionSource
+    | MicrosoftTeamsSessionSource
+    | ReadinessRemediationSessionSource
+    | ReadinessEvaluationSessionSource
+    | AutomationSessionSource
+    | WikiGenerationSessionSource
+    | WikiCISetupSessionSource
+    | TuiSessionSource
+    | DesktopSessionSource
+    | AcpSessionSource
+    | UnknownSessionSource,
+    Field(discriminator="platform"),
+]
+
+
+class SessionSource(RootModel[SessionSourceUnion]):
+    """Discriminated authority session-source union."""
+
+    @property
+    def platform(self) -> SessionPlatform:
+        """Return the selected source platform."""
+        return self.root.platform
 
 
 class StdioMcpConfig(BaseModel):
@@ -333,6 +494,14 @@ class StdioMcpConfig(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     """Environment variables for the server process."""
 
+    @field_validator("name", "command")
+    @classmethod
+    def validate_non_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("MCP server name and command cannot be blank")
+        return value
+
 
 class HttpHeader(BaseModel):
     """HTTP header for MCP server configuration."""
@@ -344,6 +513,127 @@ class HttpHeader(BaseModel):
 
     value: str
     """Header value."""
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value or any(character.isspace() for character in value):
+            raise ValueError("MCP header name cannot be blank or contain whitespace")
+        return value
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: str) -> str:
+        if "\r" in value or "\n" in value:
+            raise ValueError("MCP header value cannot contain line breaks")
+        return value
+
+
+class McpOAuthOptions(BaseModel):
+    """OAuth options for HTTP and SSE MCP transports."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    scopes: list[str] | None = None
+    resource: str | Literal[False] | None = None
+    authorization_server_issuer: str | None = Field(
+        default=None, alias="authorizationServerIssuer"
+    )
+    client_metadata_url: str | None = Field(default=None, alias="clientMetadataUrl")
+    client_id: str | None = Field(default=None, alias="clientId")
+    client_secret: str | None = Field(default=None, alias="clientSecret")
+    callback_port: int | None = Field(
+        default=None, alias="callbackPort", ge=1, le=65535
+    )
+    token_endpoint_auth_method: McpOAuthTokenEndpointAuthMethod | None = Field(
+        default=None, alias="tokenEndpointAuthMethod"
+    )
+
+    @field_validator("scopes")
+    @classmethod
+    def validate_scopes(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        scopes = [scope.strip() for scope in value]
+        if any(not scope for scope in scopes):
+            raise ValueError("OAuth scopes cannot be blank")
+        return scopes
+
+    @field_validator("client_id")
+    @classmethod
+    def validate_client_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("clientId cannot be blank")
+        return value
+
+    @field_validator("client_secret")
+    @classmethod
+    def validate_client_secret(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("clientSecret cannot be blank")
+        return value
+
+    @field_validator("resource", "authorization_server_issuer")
+    @classmethod
+    def validate_oauth_url_or_false(
+        cls, value: str | Literal[False] | None
+    ) -> str | Literal[False] | None:
+        if value is None or value is False:
+            return value
+        parsed = urlsplit(value)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("Expected an absolute URL")
+        return value
+
+    @field_validator("client_metadata_url")
+    @classmethod
+    def validate_client_metadata_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if _MCP_OAUTH_CLIENT_METADATA_DOT_SEGMENT_RE.search(value):
+            raise ValueError("clientMetadataUrl cannot contain dot segments")
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.path == "/"
+            or not parsed.path
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "clientMetadataUrl must be an HTTPS URL with a non-root "
+                "pathname, no credentials, query, fragment, or dot segments"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_oauth_configuration(self) -> McpOAuthOptions:
+        has_credentials = self.client_id is not None or self.client_secret is not None
+        if self.client_metadata_url is not None and has_credentials:
+            raise ValueError(
+                "clientMetadataUrl cannot be combined with configured OAuth "
+                "client credentials"
+            )
+        if (
+            self.client_metadata_url is not None
+            and self.token_endpoint_auth_method
+            not in {None, McpOAuthTokenEndpointAuthMethod.None_}
+        ):
+            raise ValueError(
+                "clientMetadataUrl requires public OAuth token endpoint authentication"
+            )
+        if has_credentials and self.authorization_server_issuer is None:
+            raise ValueError(
+                "authorizationServerIssuer is required with configured OAuth "
+                "client credentials"
+            )
+        return self
 
 
 class HttpMcpConfig(BaseModel):
@@ -360,8 +650,28 @@ class HttpMcpConfig(BaseModel):
     url: str
     """URL endpoint for the MCP server."""
 
-    headers: list[HttpHeader] = Field(default_factory=list)
+    headers: list[HttpHeader] = Field(default_factory=lambda: list[HttpHeader]())
     """HTTP headers for authentication."""
+
+    oauth: McpOAuthOptions | Literal[False] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("MCP server name cannot be blank")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("MCP URL must be an absolute HTTP(S) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("MCP URL cannot contain credentials")
+        return value
 
 
 class SseMcpConfig(BaseModel):
@@ -378,8 +688,29 @@ class SseMcpConfig(BaseModel):
     url: str
     """URL endpoint for the MCP server."""
 
-    headers: list[HttpHeader] = Field(default_factory=list)
+    headers: list[HttpHeader] = Field(default_factory=lambda: list[HttpHeader]())
     """HTTP headers for authentication."""
+
+    oauth: McpOAuthOptions | Literal[False] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        return HttpMcpConfig.validate_name(value)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        return HttpMcpConfig.validate_url(value)
+
+
+class SandboxStatus(BaseModel):
+    """Session sandbox status."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    enabled: bool
+    mode: SandboxMode | None = None
 
 
 class SessionSettings(BaseModel):
@@ -411,6 +742,18 @@ class SessionSettings(BaseModel):
         default=None, alias="specModeReasoningEffort"
     )
     """Optional spec mode reasoning effort override."""
+
+    tags: list[SessionTag] | None = None
+    sandbox: SandboxStatus | None = None
+    compaction_threshold_check_enabled: bool | None = Field(
+        default=None, alias="compactionThresholdCheckEnabled"
+    )
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    restrict_tool_ids: list[str] | None = Field(default=None, alias="restrictToolIds")
 
 
 class GitRepoInfo(BaseModel):
@@ -485,27 +828,6 @@ class AvailableModelConfig(BaseModel):
     """Whether this model uses US-based inference."""
 
 
-class TokenUsage(BaseModel):
-    """Token usage information for a session."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    input_tokens: int = Field(alias="inputTokens")
-    """Number of input tokens consumed."""
-
-    output_tokens: int = Field(alias="outputTokens")
-    """Number of output tokens generated."""
-
-    cache_creation_tokens: int = Field(alias="cacheCreationTokens")
-    """Number of tokens used for cache creation."""
-
-    cache_read_tokens: int = Field(alias="cacheReadTokens")
-    """Number of tokens read from cache."""
-
-    thinking_tokens: int = Field(alias="thinkingTokens")
-    """Number of tokens used for thinking/reasoning."""
-
-
 class WorkerStateInfo(BaseModel):
     """Worker state information for mission snapshots."""
 
@@ -567,6 +889,8 @@ class SkillInfo(BaseModel):
 
     resources: list[SkillResource] | None = None
     """Other files in the skill folder."""
+
+    disabled_by: dict[str, Any] | None = Field(default=None, alias="disabledBy")
 
 
 # ============================================================
@@ -642,6 +966,24 @@ class InitializeSessionRequestParams(BaseModel):
     disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
     """Tool IDs to disable (subtractive; applied on top of the default set)."""
 
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    """Additional tool IDs to add to the catalog."""
+
+    restrict_tool_ids: list[str] | None = Field(default=None, alias="restrictToolIds")
+    """Restrictive tool allowlist."""
+
+    compaction_threshold_check_enabled: bool | None = Field(
+        default=None, alias="compactionThresholdCheckEnabled"
+    )
+    auto_reject_permission_requests: bool | None = Field(
+        default=None, alias="autoRejectPermissionRequests"
+    )
+    disable_builtin_skills: bool | None = Field(
+        default=None, alias="disableBuiltinSkills"
+    )
+
     session_location: str | None = Field(default=None, alias="sessionLocation")
     """Session metadata location."""
 
@@ -674,6 +1016,20 @@ class LoadSessionRequestParams(BaseModel):
         default=None, alias="mcpOAuthCallbackUri"
     )
     """OAuth callback URI for MCP auth relay."""
+
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    enabled_tool_ids: list[str] | None = Field(default=None, alias="enabledToolIds")
+    disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
+    auto_reject_permission_requests: bool | None = Field(
+        default=None, alias="autoRejectPermissionRequests"
+    )
+    disable_builtin_skills: bool | None = Field(
+        default=None, alias="disableBuiltinSkills"
+    )
+    session_location: str | None = Field(default=None, alias="sessionLocation")
+    session_source: SessionSource | None = Field(default=None, alias="sessionSource")
 
 
 class AddUserMessageRequestParams(BaseModel):
@@ -750,6 +1106,18 @@ class UpdateSessionSettingsRequestParams(BaseModel):
     disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
     """Tool IDs to disable (subtractive)."""
 
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    restrict_tool_ids: list[str] | None = Field(default=None, alias="restrictToolIds")
+    tags: list[SessionTag] | None = None
+    compaction_token_limit: int | None = Field(
+        default=None, alias="compactionTokenLimit"
+    )
+    compaction_threshold_check_enabled: bool | None = Field(
+        default=None, alias="compactionThresholdCheckEnabled"
+    )
+
 
 class ToggleMcpServerRequestParams(BaseModel):
     """Parameters for droid.toggle_mcp_server request."""
@@ -808,6 +1176,17 @@ class SubmitMcpAuthCodeRequestParams(BaseModel):
     """Authentication state token."""
 
 
+class SubmitMcpAuthErrorRequestParams(BaseModel):
+    """Parameters for reporting an MCP OAuth callback error."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    server_name: str = Field(alias="serverName")
+    error: str
+    error_description: str | None = Field(default=None, alias="errorDescription")
+    state: str
+
+
 class AddMcpServerRequestParams(BaseModel):
     """Parameters for droid.add_mcp_server request.
 
@@ -829,6 +1208,8 @@ class AddMcpServerRequestParams(BaseModel):
 
     headers: dict[str, str] | None = None
     """HTTP headers (for http servers)."""
+
+    oauth: McpOAuthOptions | Literal[False] | None = None
 
     # Stdio config fields
     command: str | None = None
@@ -892,6 +1273,18 @@ class ListSkillsRequestParams(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class SetSkillDisabledRequestParams(BaseModel):
+    """Parameters for enabling or disabling a skill."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    skill_name: str = Field(alias="skillName")
+    disabled: bool
+    settings_level: Literal[SettingsLevel.User, SettingsLevel.Project] | None = Field(
+        default=None, alias="settingsLevel"
+    )
+
+
 class SubmitBugReportRequestParams(BaseModel):
     """Parameters for droid.submit_bug_report request."""
 
@@ -914,6 +1307,21 @@ class ListToolsRequestParams(BaseModel):
 
     disabled_tool_ids: list[str] | None = Field(default=None, alias="disabledToolIds")
     """Optional hypothetical disabled tool IDs."""
+
+    model_id: str | None = Field(default=None, alias="modelId")
+    autonomy_mode: AutonomyMode | None = Field(default=None, alias="autonomyMode")
+    interaction_mode: DroidInteractionMode | None = Field(
+        default=None, alias="interactionMode"
+    )
+    autonomy_level: AutonomyLevel | None = Field(default=None, alias="autonomyLevel")
+    spec_mode_model_id: str | None = Field(default=None, alias="specModeModelId")
+    additional_tool_ids: list[str] | None = Field(
+        default=None, alias="additionalToolIds"
+    )
+    restrict_tool_ids: list[str] | None = Field(default=None, alias="restrictToolIds")
+    skip_permissions_unsafe: bool | None = Field(
+        default=None, alias="skipPermissionsUnsafe"
+    )
 
 
 class ListCommandsRequestParams(BaseModel):
@@ -1143,6 +1551,14 @@ class SubmitMcpAuthCodeRequest(JsonRpcRequest):
     """Typed request parameters."""
 
 
+class SubmitMcpAuthErrorRequest(JsonRpcRequest):
+    """Request to report an MCP OAuth callback error."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.SUBMIT_MCP_AUTH_ERROR]
+    params: SubmitMcpAuthErrorRequestParams  # type: ignore[assignment]
+
+
 class AddMcpServerRequest(JsonRpcRequest):
     """Request to add an MCP server."""
 
@@ -1225,6 +1641,14 @@ class ListSkillsRequest(JsonRpcRequest):
 
     params: ListSkillsRequestParams  # type: ignore[assignment]
     """Typed request parameters."""
+
+
+class SetSkillDisabledRequest(JsonRpcRequest):
+    """Request to enable or disable a skill."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.SET_SKILL_DISABLED]
+    params: SetSkillDisabledRequestParams  # type: ignore[assignment]
 
 
 class SubmitBugReportRequest(JsonRpcRequest):
@@ -1328,6 +1752,33 @@ class ExecuteRewindRequest(JsonRpcRequest):
 # ============================================================
 
 
+class SessionData(BaseModel):
+    """Typed session snapshot returned by initialize and load."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    messages: list[FactoryDroidMessage]
+    title: str | None = None
+
+
+class PendingPermissionRequest(RequestPermissionRequestParams):
+    """Pending permission request restored with its JSON-RPC request ID."""
+
+    request_id: str = Field(alias="requestId")
+
+
+class PendingAskUserRequest(AskUserRequestParams):
+    """Pending ask-user request restored with its JSON-RPC request ID."""
+
+    request_id: str = Field(alias="requestId")
+
+
+class QueuedUserMessage(AddUserMessageRequestParams):
+    """Queued user message restored with its queue request ID."""
+
+    request_id: str = Field(alias="requestId")
+
+
 class InitializeSessionResult(BaseModel):
     """Result for droid.initialize_session response."""
 
@@ -1336,8 +1787,8 @@ class InitializeSessionResult(BaseModel):
     session_id: str = Field(alias="sessionId")
     """Created session ID."""
 
-    session: dict[str, Any]
-    """Session data (messages, etc.)."""
+    session: SessionData
+    """Typed session snapshot."""
 
     mcp_servers: list[StdioMcpConfig | HttpMcpConfig | SseMcpConfig] | None = Field(
         default=None, alias="mcpServers"
@@ -1392,20 +1843,20 @@ class LoadSessionResult(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    session: dict[str, Any]
-    """Session data (messages, etc.)."""
+    session: SessionData
+    """Typed session snapshot."""
 
     mcp_servers: list[StdioMcpConfig | HttpMcpConfig | SseMcpConfig] | None = Field(
         default=None, alias="mcpServers"
     )
     """MCP server configurations."""
 
-    pending_permissions: list[dict[str, Any]] | None = Field(
+    pending_permissions: list[PendingPermissionRequest] | None = Field(
         default=None, alias="pendingPermissions"
     )
     """Pending permission requests."""
 
-    pending_ask_user_requests: list[dict[str, Any]] | None = Field(
+    pending_ask_user_requests: list[PendingAskUserRequest] | None = Field(
         default=None, alias="pendingAskUserRequests"
     )
     """Pending ask-user requests."""
@@ -1418,7 +1869,7 @@ class LoadSessionResult(BaseModel):
     )
     """Whether the agent loop is currently running."""
 
-    queued_messages: list[dict[str, Any]] | None = Field(
+    queued_messages: list[QueuedUserMessage] | None = Field(
         default=None, alias="queuedMessages"
     )
     """Queued user messages."""
@@ -1450,6 +1901,14 @@ class LoadSessionResult(BaseModel):
         default=None, alias="decompSessionType"
     )
     """Session type for mission decomposition."""
+
+    working_state: DroidWorkingState | None = Field(default=None, alias="workingState")
+    inclusive_token_usage: TokenUsage | None = Field(
+        default=None, alias="inclusiveTokenUsage"
+    )
+    last_call_token_usage: LastCallTokenUsage | None = Field(
+        default=None, alias="lastCallTokenUsage"
+    )
 
 
 class AddUserMessageResult(BaseModel):
@@ -1521,6 +1980,14 @@ class SubmitMcpAuthCodeResult(BaseModel):
     """Whether the operation succeeded."""
 
 
+class SubmitMcpAuthErrorResult(BaseModel):
+    """Result for droid.submit_mcp_auth_error response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    success: bool
+
+
 class AddMcpServerResult(BaseModel):
     """Result for droid.add_mcp_server response."""
 
@@ -1585,6 +2052,16 @@ class ListSkillsResult(BaseModel):
 
     skills: list[SkillInfo]
     """Available skills."""
+
+    project_available: bool | None = Field(default=None, alias="projectAvailable")
+
+
+class SetSkillDisabledResult(BaseModel):
+    """Result for droid.set_skill_disabled response."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    success: bool
 
 
 class SubmitBugReportResult(BaseModel):
@@ -1724,8 +2201,8 @@ class GetContextStatsResult(BaseModel):
     limit: int
     """Total context window size."""
 
-    accuracy: str
-    """Accuracy of the estimate (server-driven string enum)."""
+    accuracy: ContextStatsAccuracy
+    """Accuracy of the context measurement."""
 
     updated_at: str = Field(alias="updatedAt")
     """ISO 8601 timestamp of the last update."""
@@ -1952,6 +2429,13 @@ class _SubmitMcpAuthCodeResponseSuccess(JsonRpcResponseSuccess):
     result: SubmitMcpAuthCodeResult  # type: ignore[assignment]
 
 
+class _SubmitMcpAuthErrorResponseSuccess(JsonRpcResponseSuccess):
+    """Success response for submit_mcp_auth_error."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: SubmitMcpAuthErrorResult  # type: ignore[assignment]
+
+
 class _AddMcpServerResponseSuccess(JsonRpcResponseSuccess):
     """Success response for add_mcp_server."""
 
@@ -1999,6 +2483,13 @@ class _ListSkillsResponseSuccess(JsonRpcResponseSuccess):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     result: ListSkillsResult  # type: ignore[assignment]
+
+
+class _SetSkillDisabledResponseSuccess(JsonRpcResponseSuccess):
+    """Success response for set_skill_disabled."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: SetSkillDisabledResult  # type: ignore[assignment]
 
 
 class _SubmitBugReportResponseSuccess(JsonRpcResponseSuccess):
@@ -2075,6 +2566,7 @@ AuthenticateMcpServerResponse = (
 CancelMcpAuthResponse = _CancelMcpAuthResponseSuccess | JsonRpcResponseFailure
 ClearMcpAuthResponse = _ClearMcpAuthResponseSuccess | JsonRpcResponseFailure
 SubmitMcpAuthCodeResponse = _SubmitMcpAuthCodeResponseSuccess | JsonRpcResponseFailure
+SubmitMcpAuthErrorResponse = _SubmitMcpAuthErrorResponseSuccess | JsonRpcResponseFailure
 AddMcpServerResponse = _AddMcpServerResponseSuccess | JsonRpcResponseFailure
 RemoveMcpServerResponse = _RemoveMcpServerResponseSuccess | JsonRpcResponseFailure
 ListMcpRegistryResponse = _ListMcpRegistryResponseSuccess | JsonRpcResponseFailure
@@ -2082,6 +2574,7 @@ ListMcpToolsResponse = _ListMcpToolsResponseSuccess | JsonRpcResponseFailure
 ListMcpServersResponse = _ListMcpServersResponseSuccess | JsonRpcResponseFailure
 ToggleMcpToolResponse = _ToggleMcpToolResponseSuccess | JsonRpcResponseFailure
 ListSkillsResponse = _ListSkillsResponseSuccess | JsonRpcResponseFailure
+SetSkillDisabledResponse = _SetSkillDisabledResponseSuccess | JsonRpcResponseFailure
 SubmitBugReportResponse = _SubmitBugReportResponseSuccess | JsonRpcResponseFailure
 ListToolsResponse = _ListToolsResponseSuccess | JsonRpcResponseFailure
 ListCommandsResponse = _ListCommandsResponseSuccess | JsonRpcResponseFailure
@@ -2098,7 +2591,7 @@ ExecuteRewindResponse = _ExecuteRewindResponseSuccess | JsonRpcResponseFailure
 
 
 # ============================================================
-# ClientRequest discriminated union over all 29 request types
+# ClientRequest discriminated union over all request types
 # ============================================================
 
 ClientRequestUnion = Annotated[
@@ -2113,6 +2606,7 @@ ClientRequestUnion = Annotated[
     | CancelMcpAuthRequest
     | ClearMcpAuthRequest
     | SubmitMcpAuthCodeRequest
+    | SubmitMcpAuthErrorRequest
     | AddMcpServerRequest
     | RemoveMcpServerRequest
     | ListMcpRegistryRequest
@@ -2120,6 +2614,7 @@ ClientRequestUnion = Annotated[
     | ListMcpServersRequest
     | ToggleMcpToolRequest
     | ListSkillsRequest
+    | SetSkillDisabledRequest
     | SubmitBugReportRequest
     | ListToolsRequest
     | ListCommandsRequest
@@ -2136,7 +2631,7 @@ ClientRequestUnion = Annotated[
 
 
 class ClientRequest(RootModel[ClientRequestUnion]):
-    """Discriminated union over all 29 client→server request types.
+    """Discriminated union over all client→server request types.
 
     Dispatches on the ``method`` field to the appropriate request model.
     """

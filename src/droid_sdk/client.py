@@ -1,3 +1,10 @@
+# The request-param pydantic models declare camelCase wire aliases with
+# populate_by_name=True. Pyright's dataclass_transform support only sees the
+# aliases, so it rejects the snake_case keywords these constructors accept at
+# runtime; mypy's pydantic plugin validates those same calls. Only
+# call-signature checking is disabled here.
+# pyright: reportCallIssue=false
+
 """DroidClient — high-level async API for the Factory Droid SDK.
 
 Provides typed async methods for all ``droid.*`` JSON-RPC methods,
@@ -11,9 +18,9 @@ import asyncio
 import contextlib
 import dataclasses
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from types import TracebackType  # noqa: TC003
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
@@ -26,6 +33,8 @@ from droid_sdk.protocol import (
     MCP_AUTH_TIMEOUT,
     SESSION_INIT_TIMEOUT,
     ProtocolEngine,
+    ProtocolTimingCallback,
+    TraceMetaInjector,
 )
 from droid_sdk.schemas.cli import (
     SessionNotification,
@@ -50,6 +59,7 @@ from droid_sdk.schemas.client import (
     GetContextStatsResult,
     GetRewindInfoRequestParams,
     GetRewindInfoResult,
+    HttpMcpConfig,
     InitializeSessionRequestParams,
     InitializeSessionResult,
     ListCommandsResult,
@@ -61,6 +71,7 @@ from droid_sdk.schemas.client import (
     ListToolsResult,
     LoadSessionRequestParams,
     LoadSessionResult,
+    McpOAuthOptions,
     OutputFormat,
     RemoveMcpServerResult,
     RenameSessionRequestParams,
@@ -69,8 +80,12 @@ from droid_sdk.schemas.client import (
     RewindFileSnapshot,
     SessionSource,
     SessionTag,
+    SetSkillDisabledResult,
+    SseMcpConfig,
+    StdioMcpConfig,
     SubmitBugReportResult,
     SubmitMcpAuthCodeResult,
+    SubmitMcpAuthErrorResult,
     ToggleMcpServerResult,
     ToggleMcpToolResult,
     UpdateSessionSettingsRequestParams,
@@ -150,6 +165,8 @@ class DroidClient:
         exec_path: str | None = None,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
+        trace_meta_injector: TraceMetaInjector | None = None,
+        timing_callback: ProtocolTimingCallback | None = None,
     ) -> None:
         if transport is None and exec_path is None:
             raise ValueError(
@@ -163,6 +180,8 @@ class DroidClient:
         self._exec_path = exec_path
         self._cwd = cwd
         self._env = env
+        self._trace_meta_injector = trace_meta_injector
+        self._timing_callback = timing_callback
 
         self._protocol: ProtocolEngine | None = None
         self._session_id: str | None = None
@@ -172,6 +191,7 @@ class DroidClient:
         self._notification_listeners: list[
             tuple[NotificationCallback, SessionNotificationType | None]
         ] = []
+        self._error_listeners: list[Callable[[Exception], None]] = []
 
         # Client-level server→client request handlers
         self._permission_handler: Callable[..., Any] | None = None
@@ -224,12 +244,18 @@ class DroidClient:
             )
 
         # Connect the transport (e.g. spawn subprocess)
-        await self._transport.connect()
+        if not self._transport.is_connected:
+            await self._transport.connect()
 
-        self._protocol = ProtocolEngine(transport=self._transport)
+        self._protocol = ProtocolEngine(
+            transport=self._transport,
+            trace_meta_injector=self._trace_meta_injector,
+            timing_callback=self._timing_callback,
+        )
 
         # Wire up protocol engine's notification dispatch to client listeners
         self._protocol.on_notification(self._dispatch_notification)
+        self._protocol.on_error(self._dispatch_error)
 
         # Wire up protocol engine's server→client request handlers
         self._protocol.set_permission_handler(self._dispatch_permission_request)
@@ -252,6 +278,7 @@ class DroidClient:
 
         # Clear client-level handlers and listeners
         self._notification_listeners.clear()
+        self._error_listeners.clear()
         self._permission_handler = None
         self._ask_user_handler = None
 
@@ -301,11 +328,16 @@ class DroidClient:
         decomp_session_type: DecompSessionType | None = None,
         decomp_mission_id: str | None = None,
         skip_permissions_unsafe: bool | None = None,
+        compaction_threshold_check_enabled: bool | None = None,
+        additional_tool_ids: list[str] | None = None,
         enabled_tool_ids: list[str] | None = None,
         disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
         session_location: str | None = None,
         session_source: SessionSource | dict[str, Any] | None = None,
         tags: list[SessionTag | dict[str, Any]] | None = None,
+        auto_reject_permission_requests: bool | None = None,
+        disable_builtin_skills: bool | None = None,
         mcp_oauth_callback_uri: str | None = None,
     ) -> InitializeSessionResult:
         """Initialize a new session.
@@ -330,13 +362,20 @@ class DroidClient:
             decomp_session_type: Session type for mission decomposition.
             decomp_mission_id: Mission ID for worker sessions.
             skip_permissions_unsafe: Skip permission checks.
+            compaction_threshold_check_enabled: Whether to check the context
+                compaction threshold.
+            additional_tool_ids: Tool IDs to add to the available catalog.
             enabled_tool_ids: Additional tool IDs to enable beyond defaults.
             disabled_tool_ids: Tool IDs to disable (subtractive). Combine with
                 ``enabled_tool_ids=[]`` and an explicit disable list to lock
                 the tool set down.
+            restrict_tool_ids: Restrict available tools to these IDs.
             session_location: Session metadata location.
             session_source: Session source information.
             tags: Optional session tags.
+            auto_reject_permission_requests: Whether to reject permission
+                requests instead of forwarding them.
+            disable_builtin_skills: Whether builtin skills are unavailable.
             mcp_oauth_callback_uri: OAuth callback URI for MCP.
 
         Returns:
@@ -366,6 +405,7 @@ class DroidClient:
                 cwd=cwd,
                 session_id=session_id,
                 workspace_id=workspace_id,
+                mcp_servers=_validate_mcp_servers(mcp_servers),
                 autonomy_mode=autonomy_mode,
                 interaction_mode=interaction_mode,
                 autonomy_level=autonomy_level,
@@ -376,18 +416,19 @@ class DroidClient:
                 decomp_session_type=decomp_session_type,
                 decomp_mission_id=decomp_mission_id,
                 skip_permissions_unsafe=skip_permissions_unsafe,
+                compaction_threshold_check_enabled=compaction_threshold_check_enabled,
+                additional_tool_ids=additional_tool_ids,
                 enabled_tool_ids=enabled_tool_ids,
                 disabled_tool_ids=disabled_tool_ids,
+                restrict_tool_ids=restrict_tool_ids,
                 session_location=session_location,
                 session_source=validated_session_source,
                 tags=validated_tags,
+                auto_reject_permission_requests=auto_reject_permission_requests,
+                disable_builtin_skills=disable_builtin_skills,
                 mcp_oauth_callback_uri=mcp_oauth_callback_uri,
             )
         )
-        # Preserve compatibility with legacy unvalidated MCP dictionaries.
-        if mcp_servers is not None:
-            params["mcpServers"] = mcp_servers
-
         response = await protocol.send_request(
             method=DroidServerMethod.INITIALIZE_SESSION.value,
             params=params,
@@ -404,6 +445,13 @@ class DroidClient:
         session_id: str,
         mcp_servers: list[dict[str, Any]] | None = None,
         mcp_oauth_callback_uri: str | None = None,
+        additional_tool_ids: list[str] | None = None,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
+        auto_reject_permission_requests: bool | None = None,
+        disable_builtin_skills: bool | None = None,
+        session_location: str | None = None,
+        session_source: SessionSource | dict[str, Any] | None = None,
     ) -> LoadSessionResult:
         """Load an existing session.
 
@@ -415,6 +463,14 @@ class DroidClient:
             session_id: Session ID to load.
             mcp_servers: Optional MCP server configurations.
             mcp_oauth_callback_uri: OAuth callback URI for MCP.
+            additional_tool_ids: Tool IDs to add to the available catalog.
+            enabled_tool_ids: Additional tool IDs to enable beyond defaults.
+            disabled_tool_ids: Tool IDs to disable (subtractive).
+            auto_reject_permission_requests: Whether to reject permission
+                requests instead of forwarding them.
+            disable_builtin_skills: Whether builtin skills are unavailable.
+            session_location: Optional session origin/location metadata.
+            session_source: Optional structured session source metadata.
 
         Returns:
             Typed ``LoadSessionResult`` with session and settings.
@@ -427,16 +483,25 @@ class DroidClient:
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
 
+        validated_session_source = (
+            SessionSource.model_validate(session_source)
+            if session_source is not None
+            else None
+        )
         params = _serialize_params(
             LoadSessionRequestParams(
                 session_id=session_id,
+                mcp_servers=_validate_mcp_servers(mcp_servers),
                 mcp_oauth_callback_uri=mcp_oauth_callback_uri,
+                additional_tool_ids=additional_tool_ids,
+                enabled_tool_ids=enabled_tool_ids,
+                disabled_tool_ids=disabled_tool_ids,
+                auto_reject_permission_requests=auto_reject_permission_requests,
+                disable_builtin_skills=disable_builtin_skills,
+                session_location=session_location,
+                session_source=validated_session_source,
             )
         )
-        # Preserve compatibility with legacy unvalidated MCP dictionaries.
-        if mcp_servers is not None:
-            params["mcpServers"] = mcp_servers
-
         response = await protocol.send_request(
             method=DroidServerMethod.LOAD_SESSION.value,
             params=params,
@@ -451,6 +516,7 @@ class DroidClient:
         self,
         *,
         text: str,
+        message_id: str | None = None,
         images: list[Base64ImageSource | dict[str, Any]] | None = None,
         files: list[DocumentSource | dict[str, Any]] | None = None,
         output_format: OutputFormat | dict[str, Any] | None = None,
@@ -462,6 +528,7 @@ class DroidClient:
 
         Args:
             text: Message text content.
+            message_id: Optional stable identifier for the user message.
             images: Optional attached images.
             files: Optional attached documents.
             output_format: Optional structured-output contract. Either an
@@ -479,37 +546,23 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        validated_output_format = (
-            OutputFormat.model_validate(output_format)
-            if output_format is not None
-            else None
-        )
         params = _serialize_params(
-            AddUserMessageRequestParams(
-                text=text,
-                output_format=validated_output_format,
+            AddUserMessageRequestParams.model_validate(
+                {
+                    "messageId": message_id,
+                    "text": text,
+                    "images": images,
+                    "files": files,
+                    "outputFormat": output_format,
+                }
             )
         )
-        if images is not None:
-            params["images"] = images
-        if files is not None:
-            params["files"] = files
 
-        # Use custom request_id by monkey-patching the protocol temporarily,
-        # or pass via overridden send_request. The protocol engine generates
-        # its own IDs. For custom request_id support, we'll use the protocol's
-        # send_request with a specially constructed envelope.
-        if request_id is not None:
-            await protocol.send_request(
-                method=DroidServerMethod.ADD_USER_MESSAGE.value,
-                params=params,
-                request_id=request_id,
-            )
-        else:
-            await protocol.send_request(
-                method=DroidServerMethod.ADD_USER_MESSAGE.value,
-                params=params,
-            )
+        await protocol.send_request(
+            method=DroidServerMethod.ADD_USER_MESSAGE.value,
+            params=params,
+            request_id=request_id,
+        )
 
     async def interrupt_session(self) -> None:
         """Interrupt the current session.
@@ -564,8 +617,16 @@ class DroidClient:
         autonomy_level: AutonomyLevel | None = None,
         spec_mode_model_id: str | None = None,
         spec_mode_reasoning_effort: ReasoningEffort | None = None,
+        additional_tool_ids: list[str] | None = None,
         enabled_tool_ids: list[str] | None = None,
         disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
+        tags: list[SessionTag | dict[str, Any]] | None = None,
+        compaction_token_limit: int | None = None,
+        compaction_threshold_check_enabled: bool | None = None,
+        explicit_null_fields: Sequence[
+            Literal["specModeModelId", "specModeReasoningEffort"]
+        ] = (),
     ) -> None:
         """Update session settings.
 
@@ -580,8 +641,14 @@ class DroidClient:
             autonomy_level: Optional autonomy level.
             spec_mode_model_id: Optional spec mode model ID.
             spec_mode_reasoning_effort: Optional spec mode reasoning effort.
+            additional_tool_ids: Tool IDs to add to the available catalog.
             enabled_tool_ids: Additional tool IDs to enable beyond defaults.
             disabled_tool_ids: Tool IDs to disable (subtractive).
+            restrict_tool_ids: Restrict available tools to these IDs.
+            tags: Optional replacement session tags.
+            compaction_token_limit: Optional context compaction token limit.
+            compaction_threshold_check_enabled: Whether to check the context
+                compaction threshold.
 
         Raises:
             SessionError: If no active session.
@@ -592,6 +659,11 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
+        validated_tags = (
+            [SessionTag.model_validate(tag) for tag in tags]
+            if tags is not None
+            else None
+        )
         params = _serialize_params(
             UpdateSessionSettingsRequestParams(
                 model_id=model_id,
@@ -601,10 +673,17 @@ class DroidClient:
                 autonomy_level=autonomy_level,
                 spec_mode_model_id=spec_mode_model_id,
                 spec_mode_reasoning_effort=spec_mode_reasoning_effort,
+                additional_tool_ids=additional_tool_ids,
                 enabled_tool_ids=enabled_tool_ids,
                 disabled_tool_ids=disabled_tool_ids,
+                restrict_tool_ids=restrict_tool_ids,
+                tags=validated_tags,
+                compaction_token_limit=compaction_token_limit,
+                compaction_threshold_check_enabled=compaction_threshold_check_enabled,
             )
         )
+        for field in explicit_null_fields:
+            params[field] = None
 
         await protocol.send_request(
             method=DroidServerMethod.UPDATE_SESSION_SETTINGS.value,
@@ -806,6 +885,31 @@ class DroidClient:
 
         return SubmitMcpAuthCodeResult.model_validate(response.get("result", {}))
 
+    async def submit_mcp_auth_error(
+        self,
+        *,
+        server_name: str,
+        error: str,
+        state: str,
+        error_description: str | None = None,
+    ) -> SubmitMcpAuthErrorResult:
+        """Report an MCP OAuth callback error."""
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params: dict[str, Any] = {
+            "serverName": server_name,
+            "error": error,
+            "state": state,
+        }
+        _set_if_not_none(params, "errorDescription", error_description)
+        response = await protocol.send_request(
+            method=DroidServerMethod.SUBMIT_MCP_AUTH_ERROR.value,
+            params=params,
+        )
+        return SubmitMcpAuthErrorResult.model_validate(response.get("result", {}))
+
     async def add_mcp_server(
         self,
         *,
@@ -816,6 +920,7 @@ class DroidClient:
         command: str | None = None,
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        oauth: McpOAuthOptions | dict[str, Any] | Literal[False] | None = None,
     ) -> AddMcpServerResult:
         """Add an MCP server.
 
@@ -830,6 +935,8 @@ class DroidClient:
             command: Command to spawn (for stdio servers).
             args: Command arguments (for stdio servers).
             env: Environment variables (for stdio servers).
+            oauth: OAuth options for HTTP/SSE servers, or ``False`` to
+                explicitly disable OAuth.
 
         Returns:
             Typed ``AddMcpServerResult`` with ``success`` flag.
@@ -852,6 +959,13 @@ class DroidClient:
         _set_if_not_none(params, "command", command)
         _set_if_not_none(params, "args", args)
         _set_if_not_none(params, "env", env)
+        if oauth is not None:
+            if oauth is False:
+                params["oauth"] = False
+            else:
+                params["oauth"] = _serialize_params(
+                    McpOAuthOptions.model_validate(oauth)
+                )
 
         response = await protocol.send_request(
             method=DroidServerMethod.ADD_MCP_SERVER.value,
@@ -1039,6 +1153,35 @@ class DroidClient:
 
         return ListSkillsResult.model_validate(response.get("result", {}))
 
+    async def set_skill_disabled(
+        self,
+        *,
+        skill_name: str,
+        disabled: bool,
+        settings_level: SettingsLevel | None = None,
+    ) -> SetSkillDisabledResult:
+        """Enable or disable a skill in user or project settings."""
+        self._ensure_not_closed()
+        self._ensure_session()
+        protocol = self._ensure_protocol()
+
+        params: dict[str, Any] = {
+            "skillName": skill_name,
+            "disabled": disabled,
+        }
+        if settings_level not in {
+            None,
+            SettingsLevel.User,
+            SettingsLevel.Project,
+        }:
+            raise ValueError("settings_level must be user or project")
+        _set_if_not_none(params, "settingsLevel", _enum_value(settings_level))
+        response = await protocol.send_request(
+            method=DroidServerMethod.SET_SKILL_DISABLED.value,
+            params=params,
+        )
+        return SetSkillDisabledResult.model_validate(response.get("result", {}))
+
     async def submit_bug_report(
         self,
         *,
@@ -1084,8 +1227,16 @@ class DroidClient:
     async def list_tools(
         self,
         *,
+        model_id: str | None = None,
+        autonomy_mode: AutonomyMode | None = None,
+        interaction_mode: DroidInteractionMode | None = None,
+        autonomy_level: AutonomyLevel | None = None,
+        spec_mode_model_id: str | None = None,
+        additional_tool_ids: list[str] | None = None,
         enabled_tool_ids: list[str] | None = None,
         disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
     ) -> ListToolsResult:
         """List native CLI tools with their allow-state.
 
@@ -1095,9 +1246,18 @@ class DroidClient:
         ``default_allowed`` and ``currently_allowed``.
 
         Args:
+            model_id: Optional hypothetical model ID.
+            autonomy_mode: Optional hypothetical deprecated autonomy mode.
+            interaction_mode: Optional hypothetical interaction mode.
+            autonomy_level: Optional hypothetical autonomy level.
+            spec_mode_model_id: Optional hypothetical spec-mode model ID.
+            additional_tool_ids: Tool IDs to add to the hypothetical catalog.
             enabled_tool_ids: Optional hypothetical enable list to evaluate
                 ``currently_allowed`` against (does not mutate the session).
             disabled_tool_ids: Optional hypothetical disable list.
+            restrict_tool_ids: Restrict the hypothetical catalog to these IDs.
+            skip_permissions_unsafe: Whether to hypothetically skip permission
+                checks.
 
         Returns:
             Typed ``ListToolsResult`` with a ``tools`` list.
@@ -1111,8 +1271,16 @@ class DroidClient:
 
         params = _serialize_params(
             ListToolsRequestParams(
+                model_id=model_id,
+                autonomy_mode=autonomy_mode,
+                interaction_mode=interaction_mode,
+                autonomy_level=autonomy_level,
+                spec_mode_model_id=spec_mode_model_id,
+                additional_tool_ids=additional_tool_ids,
                 enabled_tool_ids=enabled_tool_ids,
                 disabled_tool_ids=disabled_tool_ids,
+                restrict_tool_ids=restrict_tool_ids,
+                skip_permissions_unsafe=skip_permissions_unsafe,
             )
         )
 
@@ -1592,6 +1760,19 @@ class DroidClient:
 
         return unsubscribe
 
+    def on_error(
+        self,
+        callback: Callable[[Exception], None],
+    ) -> Callable[[], None]:
+        """Register a listener for terminal transport errors."""
+        self._error_listeners.append(callback)
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._error_listeners.remove(callback)
+
+        return unsubscribe
+
     # ----------------------------------------------------------
     # Server→client request handlers
     # ----------------------------------------------------------
@@ -1600,12 +1781,13 @@ class DroidClient:
         """Register a handler for server→client permission requests.
 
         The handler receives the request params dict and should return
-        a ``ToolConfirmationOutcome`` string value (or any string).
+        a ``ToolConfirmationOutcome`` string value or a complete response
+        dict (``{"selectedOption": ...}``).
         Async handlers are awaited. Replaces any previously registered
         handler.
 
         Args:
-            handler: Sync or async callable ``(params) -> str``.
+            handler: Sync or async callable ``(params) -> str | dict``.
         """
         self._permission_handler = handler
         # Update protocol engine if already connected
@@ -1657,11 +1839,13 @@ class DroidClient:
         """
         # Extract the notification type from the payload
         notif_type: str | None = None
-        params = notification.get("params")
+        params = cast("object", notification.get("params"))
         if isinstance(params, dict):
-            inner = params.get("notification")
+            inner = cast("dict[str, object]", params).get("notification")
             if isinstance(inner, dict):
-                notif_type = inner.get("type")
+                raw_type = cast("dict[str, object]", inner).get("type")
+                if isinstance(raw_type, str):
+                    notif_type = raw_type
 
         for callback, type_filter in list(self._notification_listeners):
             if type_filter is not None and notif_type != type_filter.value:
@@ -1673,6 +1857,13 @@ class DroidClient:
                     "Client notification listener raised an exception",
                     exc_info=True,
                 )
+
+    def _dispatch_error(self, error: Exception) -> None:
+        for callback in list(self._error_listeners):
+            try:
+                callback(error)
+            except Exception:
+                logger.warning("Client error listener raised", exc_info=True)
 
     def _dispatch_permission_request(self, params: dict[str, Any]) -> Any:
         """Dispatch to the client-level permission handler.
@@ -1734,6 +1925,23 @@ def _serialize_params(model: BaseModel) -> dict[str, Any]:
         by_alias=True,
         exclude_none=True,
     )
+
+
+def _validate_mcp_servers(
+    values: list[dict[str, Any]] | None,
+) -> list[StdioMcpConfig | HttpMcpConfig | SseMcpConfig] | None:
+    if values is None:
+        return None
+    result: list[StdioMcpConfig | HttpMcpConfig | SseMcpConfig] = []
+    for value in values:
+        server_type = value.get("type")
+        if server_type == "http":
+            result.append(HttpMcpConfig.model_validate(value))
+        elif server_type == "sse":
+            result.append(SseMcpConfig.model_validate(value))
+        else:
+            result.append(StdioMcpConfig.model_validate(value))
+    return result
 
 
 def _enum_value(val: Any) -> Any:

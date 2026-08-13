@@ -66,7 +66,7 @@ def _make_init_response(request_id: str) -> dict[str, Any]:
         request_id=request_id,
         result={
             "sessionId": "test-session",
-            "session": {"id": "test-session"},
+            "session": {"id": "test-session", "messages": []},
             "settings": {
                 "modelId": "claude-sonnet-4",
                 "reasoningEffort": "medium",

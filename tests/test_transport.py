@@ -172,6 +172,19 @@ except:
     pass
 """
 
+# Script that fills stderr beyond a typical OS pipe before protocol output.
+LARGE_STDERR_SCRIPT = """
+import sys
+sys.stderr.write("diagnostic " * 200000)
+sys.stderr.flush()
+sys.stdout.write('{"ready": true}\\n')
+sys.stdout.flush()
+try:
+    sys.stdin.read()
+except:
+    pass
+"""
+
 # Script that waits for input and echoes JSON-RPC style
 WAIT_AND_ECHO_SCRIPT = """
 import sys, json
@@ -567,13 +580,16 @@ class TestProcessTransportExitDetection:
         assert messages[1]["id"] == "2"
 
     @pytest.mark.asyncio
-    async def test_stderr_captured_on_exit(self) -> None:
-        """Stderr output is captured when process exits abnormally."""
-        script = """
+    @pytest.mark.parametrize("exit_code", [0, 23])
+    async def test_exit_includes_bounded_stderr_diagnostics(
+        self,
+        exit_code: int,
+    ) -> None:
+        script = f"""
 import sys
-sys.stderr.write("error output\\n")
+sys.stderr.write("useful diagnostic " * 5000)
 sys.stderr.flush()
-sys.exit(1)
+sys.exit({exit_code})
 """
         transport = ProcessTransport(
             exec_path=sys.executable,
@@ -582,9 +598,66 @@ sys.exit(1)
         await transport.connect()
         _messages, errors = await _read_until_done(transport, timeout=5.0)
 
+        assert len(errors) == 1
+        assert isinstance(errors[0], ProcessExitError)
+        assert "useful diagnostic" in str(errors[0])
+        assert len(str(errors[0])) < 17_000
+        assert transport._stderr_task is None
+
+    @pytest.mark.asyncio
+    async def test_stderr_secrets_are_never_exposed(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Raw child stderr and explicit environment secrets stay private."""
+        secret = "factory-secret-value"
+        script = """
+import os, sys
+sys.stderr.write(os.environ["PRIVATE_RUNTIME_VALUE"] + "\\n")
+sys.stderr.flush()
+sys.exit(1)
+"""
+        transport = ProcessTransport(
+            exec_path=sys.executable,
+            exec_args=["-c", script],
+            env={"PRIVATE_RUNTIME_VALUE": secret, "FACTORY_API_KEY": secret},
+        )
+        await transport.connect()
+        _messages, errors = await _read_until_done(transport, timeout=5.0)
+
         exit_errors = [e for e in errors if isinstance(e, ProcessExitError)]
         assert len(exit_errors) >= 1
         assert exit_errors[0].exit_code == 1
+        assert secret not in str(exit_errors[0])
+        assert secret not in repr(exit_errors[0])
+        assert secret not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_stderr_redacts_configured_values_and_key_patterns(self) -> None:
+        configured = "ordinary-configured-value"
+        api_key = "sk_live_unconfigured_api_key"
+        script = f"""
+import sys
+sys.stderr.write(
+    "configured={configured} API_KEY={api_key} "
+    "Authorization: Bearer bearer-secret-value"
+)
+sys.stderr.flush()
+sys.exit(1)
+"""
+        transport = ProcessTransport(
+            exec_path=sys.executable,
+            exec_args=["-c", script],
+            env={"DISPLAY_NAME": configured},
+        )
+        await transport.connect()
+        _messages, errors = await _read_until_done(transport, timeout=5.0)
+
+        diagnostic = str(errors[0])
+        assert "[REDACTED]" in diagnostic
+        assert configured not in diagnostic
+        assert api_key not in diagnostic
+        assert "bearer-secret-value" not in diagnostic
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +743,33 @@ class TestProcessTransportClose:
 
         # Should complete within grace_period(1s) + 2s buffer
         assert elapsed < 3.0
+
+    @pytest.mark.asyncio
+    async def test_close_cancellation_cleans_stderr_task_and_allows_reconnect(
+        self,
+    ) -> None:
+        transport = ProcessTransport(
+            exec_path=sys.executable,
+            exec_args=["-c", STUBBORN_SCRIPT],
+            grace_period=5,
+        )
+        await transport.connect()
+        await asyncio.sleep(0.2)
+        stderr_task = transport._stderr_task
+        assert stderr_task is not None
+
+        close_task = asyncio.create_task(transport.close())
+        await asyncio.sleep(0)
+        close_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await close_task
+
+        assert stderr_task.done()
+        assert transport._stderr_task is None
+        transport._exec_args = ["-c", ECHO_SCRIPT]
+        await transport.connect()
+        await transport.close()
+        assert transport._stderr_task is None
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +908,20 @@ class TestProcessTransportLargePayloads:
         assert len(messages) >= 1
         assert messages[0]["id"] == "large"
         assert len(messages[0]["data"]) == 200_000
+
+    @pytest.mark.asyncio
+    async def test_large_stderr_before_protocol_output_cannot_deadlock(self) -> None:
+        transport = ProcessTransport(
+            exec_path=sys.executable,
+            exec_args=["-c", LARGE_STDERR_SCRIPT],
+        )
+        await transport.connect()
+        reader = transport.read_messages()
+        message = await asyncio.wait_for(anext(reader), timeout=5)
+        assert message == {"ready": True}
+        await reader.aclose()
+        await transport.close()
+        assert transport._stderr_task is None
 
 
 # ---------------------------------------------------------------------------

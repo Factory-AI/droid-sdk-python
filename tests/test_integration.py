@@ -328,7 +328,7 @@ async def test_serialization_fidelity_request_structure() -> None:
                 request["id"],
                 {
                     "sessionId": "struct-session",
-                    "session": {"id": "struct-session"},
+                    "session": {"id": "struct-session", "messages": []},
                     "settings": {
                         "modelId": "test-model",
                         "reasoningEffort": "medium",

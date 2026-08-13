@@ -114,9 +114,9 @@ class TestDroidClientTransportExport:
 
         assert Transport is not None
 
-    def test_importable_from_top_level(self) -> None:
-        """DroidClientTransport can be imported from droid_sdk."""
-        from droid_sdk import DroidClientTransport as Transport
+    def test_importable_from_low_level(self) -> None:
+        """DroidClientTransport can be imported from droid_sdk.low_level."""
+        from droid_sdk.low_level import DroidClientTransport as Transport
 
         assert Transport is not None
 

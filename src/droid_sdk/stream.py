@@ -1,3 +1,5 @@
+# pyright: reportUnknownArgumentType=false, reportUnknownMemberType=false
+
 """Typed stream message dataclasses and notification-to-stream-message converter.
 
 Provides simple ``@dataclass`` wrappers (NOT Pydantic models) that map
