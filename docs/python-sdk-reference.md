@@ -160,9 +160,7 @@ models are immutable dataclasses.
 
 Model IDs are strings because availability depends on account and
 organization policy. Omit `model` to use the configured default, which
-lives in `~/.factory/settings.json` under `sessionDefaultSettings`. Pass
-`model="auto"` to let the [Factory Router](#use-the-factory-router)
-choose a model per task.
+lives in `~/.factory/settings.json` under `sessionDefaultSettings`.
 An unknown model ID is rejected by the backend: the turn returns
 `RunFailure(subtype="error_during_execution")` with the rejection message
 in `error.message`.
@@ -261,16 +259,15 @@ config = SessionConfig(
     spec_reasoning_effort=ReasoningEffort.HIGH,
 )
 
-async with Session(model="auto", config=config) as session:
+async with Session(model="model-id", config=config) as session:
     async with session.stream("Draft an implementation plan.") as stream:
         async for _ in stream:
             pass
 ```
 
-The primary model handles Auto turns; `model="auto"` makes that the
-[Factory Router](#use-the-factory-router). `spec_model` handles Spec
-turns. Switch modes on a live session with `enter_spec()` and
-`leave_spec()`; see [Modes](#modes).
+The primary model handles Auto turns. `spec_model` handles Spec turns.
+Switch modes on a live session with `enter_spec()` and `leave_spec()`; see
+[Modes](#modes).
 
 ### Model configuration contract
 
