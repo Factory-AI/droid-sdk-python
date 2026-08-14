@@ -1,0 +1,36 @@
+examples/factory_router.py
+  a4c8744c4b020d68 1-13,18-20,22,25-26,28-34,36-60,62-119,125,128-129,132-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "ad54710f71799bc11f01265f936ee0c0712513d0",
+  "prompts": {
+    "54658a45f4b79fc8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "15fc9e55-9cbc-40eb-ae13-9f0808f5e92c",
+        "model": "auto"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 187,
+      "total_deletions": 4,
+      "accepted_lines": 183,
+      "overriden_lines": 0
+    },
+    "a4c8744c4b020d68": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "f3412832-9221-4a54-99fb-32d633bd871f",
+        "model": "claude-fable-5"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 165,
+      "total_deletions": 61,
+      "accepted_lines": 128,
+      "overriden_lines": 0
+    }
+  }
+}
