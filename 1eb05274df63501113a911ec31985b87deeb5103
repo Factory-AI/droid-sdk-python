@@ -1,0 +1,37 @@
+tests/typing/positive.py
+  18fc15e3fec4eb8e 17,96
+src/droid_sdk/__init__.py
+  18fc15e3fec4eb8e 31,206
+src/droid_sdk/_high_level/config.py
+  18fc15e3fec4eb8e 12,37-46,51-52,55,58,62-63,65,167,193
+src/droid_sdk/_high_level/_convert.py
+  18fc15e3fec4eb8e 23,116-120,128
+tests/typing/negative.py
+  18fc15e3fec4eb8e 6,31-32
+README.md
+  18fc15e3fec4eb8e 138,142-143,145-147,155-156
+tests/test_v5_session.py
+  18fc15e3fec4eb8e 14,35,83,122-124,245,287,297-301,306-319
+tests/test_v5_public_models.py
+  18fc15e3fec4eb8e 31,322,325-327,338-339,349-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "1eb05274df63501113a911ec31985b87deeb5103",
+  "prompts": {
+    "18fc15e3fec4eb8e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "d29f41ec-6674-4f25-b1c9-f146315563ed",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 92,
+      "total_deletions": 106,
+      "accepted_lines": 88,
+      "overriden_lines": 0
+    }
+  }
+}
