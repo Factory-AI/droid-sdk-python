@@ -28,6 +28,7 @@ from droid_sdk import (
     Document,
     DocumentBlock,
     DroidShieldViolationAction,
+    DroidSystemPrompt,
     EditAction,
     ErrorEvent,
     ErrorType,
@@ -65,7 +66,6 @@ from droid_sdk import (
     StdioMcpServerConfig,
     StructuredOutputError,
     SystemPromptConfig,
-    SystemPromptPreset,
     TextBlock,
     TextDocumentSource,
     ToolCategory,
@@ -319,22 +319,12 @@ def test_configuration_is_recursively_immutable() -> None:
 
 
 def test_system_prompt_configuration_is_validated_and_immutable() -> None:
-    preset = SystemPromptPreset(
-        type="preset",
-        preset="droid",
-        append="  Keep this exact.\n",
-    )
+    preset = DroidSystemPrompt(append="  Keep this exact.\n")
     config = SessionConfig(system_prompt=preset)
-    preset["append"] = "changed"
 
-    assert config.system_prompt == {
-        "type": "preset",
-        "preset": "droid",
-        "append": "  Keep this exact.\n",
-    }
-    assert isinstance(config.system_prompt, MappingProxyType)
-    with pytest.raises(TypeError):
-        config.system_prompt["append"] = "changed"  # type: ignore[index, union-attr]
+    assert config.system_prompt == DroidSystemPrompt(append="  Keep this exact.\n")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        preset.append = "changed"  # type: ignore[misc]
 
     replacement: SystemPromptConfig = "  Replacement prompt.\n"
     assert SessionConfig(system_prompt=replacement).system_prompt == replacement
@@ -345,16 +335,8 @@ def test_system_prompt_configuration_is_validated_and_immutable() -> None:
     [
         "",
         " \n\t ",
-        {"type": "preset", "preset": "droid", "append": ""},
-        {"type": "preset", "preset": "droid", "append": " \n\t "},
-        {"type": "preset", "preset": "droid"},
-        {"type": "preset", "preset": "unknown", "append": "prompt"},
-        {
-            "type": "preset",
-            "preset": "droid",
-            "append": "prompt",
-            "extra": True,
-        },
+        {"append": "prompt"},
+        object(),
     ],
 )
 def test_system_prompt_configuration_rejects_invalid_values(
@@ -362,6 +344,12 @@ def test_system_prompt_configuration_rejects_invalid_values(
 ) -> None:
     with pytest.raises((TypeError, ValueError)):
         SessionConfig(system_prompt=system_prompt)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("append", ["", " \n\t ", 1])
+def test_droid_system_prompt_rejects_invalid_append(append: object) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        DroidSystemPrompt(append=append)  # type: ignore[arg-type]
 
 
 def test_tool_overrides_accept_any_iterable_and_reject_strings() -> None:

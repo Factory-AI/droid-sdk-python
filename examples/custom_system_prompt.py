@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import asyncio
 
-from droid_sdk import SessionConfig, run
+from droid_sdk import DroidSystemPrompt, SessionConfig, run
 
 
 async def main() -> None:
     result = await run(
         "Summarize the main entry points in this project.",
         config=SessionConfig(
-            system_prompt={
-                "type": "preset",
-                "preset": "droid",
-                "append": "Keep answers concise and cite relevant files.",
-            }
+            system_prompt=DroidSystemPrompt(
+                append="Keep answers concise and cite relevant files."
+            )
         ),
         timeout=60,
     )

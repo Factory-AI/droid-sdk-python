@@ -20,13 +20,13 @@ from droid_sdk._high_level.attachments import (
     TextDocumentSource,
 )
 from droid_sdk._high_level.config import (
+    DroidSystemPrompt,
     SandboxSettings,
     SessionSettings,
     SessionSettingsUpdate,
     SessionSource,
     SessionTag,
     SystemPromptConfig,
-    SystemPromptPreset,
 )
 from droid_sdk._high_level.enums import (
     Autonomy,
@@ -113,7 +113,11 @@ def wire_system_prompt(
 ) -> WireSystemPromptConfig | None:
     if value is None or isinstance(value, str):
         return value
-    return WireSystemPromptPreset.model_validate(dict(value))
+    return WireSystemPromptPreset(
+        type="preset",
+        preset="droid",
+        append=value.append,
+    )
 
 
 def system_prompt_from_wire(
@@ -121,11 +125,7 @@ def system_prompt_from_wire(
 ) -> SystemPromptConfig | None:
     if value is None or isinstance(value, str):
         return value
-    return SystemPromptPreset(
-        type=value.type,
-        preset=value.preset,
-        append=value.append,
-    )
+    return DroidSystemPrompt(append=value.append)
 
 
 def mcp_config_to_wire(value: McpServerConfig) -> dict[str, Any]:

@@ -342,11 +342,11 @@ overrides.
 
 ### Customize the system prompt
 
-`SessionConfig.system_prompt` accepts a replacement string or a typed preset
-dictionary. A string replaces Droid's standard behavioral prompt:
+`SessionConfig.system_prompt` accepts a replacement string or
+`DroidSystemPrompt`. A string replaces Droid's standard behavioral prompt:
 
 ```python
-from droid_sdk import Session, SessionConfig
+from droid_sdk import DroidSystemPrompt, Session, SessionConfig
 
 config = SessionConfig(
     system_prompt="Act as a focused dependency-analysis agent.",
@@ -360,11 +360,9 @@ The Droid preset keeps the effective built-in prompt and appends instructions:
 
 ```python
 config = SessionConfig(
-    system_prompt={
-        "type": "preset",
-        "preset": "droid",
-        "append": "Prioritize security findings and cite relevant files.",
-    }
+    system_prompt=DroidSystemPrompt(
+        append="Prioritize security findings and cite relevant files."
+    )
 )
 ```
 
@@ -384,6 +382,10 @@ prompt.
 Prompt content is excluded from cloud settings sync, but the model can repeat
 it in messages or thinking stored in the transcript. Treat both the session
 settings and transcript as sensitive.
+
+When opening a session, the SDK verifies that Droid accepted the prompt. If the
+installed Droid version does not support custom system prompts, it raises
+`SessionError` instead of silently running with the default prompt.
 
 ### Resume a saved session
 
@@ -1694,8 +1696,8 @@ starts Droid.
 | `AskUserParseError` | `message`, `line` |
 | `SandboxSettings` | `enabled`, `mode` |
 | `SessionSettingsUpdate` | Partial settings notification documented above |
-| `SystemPromptConfig` | `str \| SystemPromptPreset` |
-| `SystemPromptPreset` | Typed dictionary with required `type="preset"`, `preset="droid"`, and nonblank `append` |
+| `DroidSystemPrompt` | Frozen dataclass with nonblank `append` |
+| `SystemPromptConfig` | `str \| DroidSystemPrompt` |
 
 ### Top-level functions
 

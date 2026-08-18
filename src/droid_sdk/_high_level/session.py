@@ -70,6 +70,7 @@ from droid_sdk.errors import (
     InvalidWorkingDirectoryError,
     SessionBusyError,
     SessionClosedError,
+    SessionError,
     SessionNotOpenError,
     SessionReplacedError,
     SessionReplacementError,
@@ -453,6 +454,14 @@ class Session(SessionOperationsMixin):
                 session_id = initialize_result.session_id
                 cwd_value = requested_cwd
                 wire_settings = initialize_result.settings
+                if (
+                    self._config.system_prompt is not None
+                    and wire_settings.system_prompt is None
+                ):
+                    raise SessionError(
+                        "The installed Droid version does not support custom "
+                        "system prompts. Update Droid and try again."
+                    )
 
             self._client = client
             self._id = session_id

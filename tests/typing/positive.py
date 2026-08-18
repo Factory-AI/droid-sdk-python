@@ -14,6 +14,7 @@ from droid_sdk import (
     AssistantMessage,
     CompactOutcome,
     DocumentBlock,
+    DroidSystemPrompt,
     FrozenJsonObject,
     FrozenJsonValue,
     ImageBlock,
@@ -42,7 +43,6 @@ from droid_sdk import (
     StreamEvent,
     StreamMessage,
     SystemPromptConfig,
-    SystemPromptPreset,
     TextBlock,
     TextDelta,
     ToolCategory,
@@ -93,11 +93,7 @@ SessionConfig(disabled_tools={"Execute"})
 SessionConfig(disabled_tools=["Execute"])
 SessionConfig(disabled_tools=("Execute",))
 
-system_prompt_preset = SystemPromptPreset(
-    type="preset",
-    preset="droid",
-    append="Prefer focused answers.",
-)
+system_prompt_preset = DroidSystemPrompt(append="Prefer focused answers.")
 system_prompt: SystemPromptConfig = system_prompt_preset
 system_prompt_config = SessionConfig(system_prompt=system_prompt)
 assert_type(
