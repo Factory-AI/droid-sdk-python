@@ -1,0 +1,25 @@
+src/droid_sdk/_high_level/config.py
+  18fc15e3fec4eb8e 12,37,40-41,45,48,52-53,55-81,183,209
+tests/test_public_api.py
+  18fc15e3fec4eb8e 159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "f4a91373727b612fafee4ea64231e34df8d2859c",
+  "prompts": {
+    "18fc15e3fec4eb8e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "d29f41ec-6674-4f25-b1c9-f146315563ed",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 38,
+      "total_deletions": 22,
+      "accepted_lines": 38,
+      "overriden_lines": 0
+    }
+  }
+}
