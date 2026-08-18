@@ -1,0 +1,31 @@
+src/droid_sdk/_high_level/config.py
+  18fc15e3fec4eb8e 12,37-85,173,182-186,200,208-212
+tests/test_client_protocol_surface.py
+  18fc15e3fec4eb8e 498-546,576
+README.md
+  18fc15e3fec4eb8e 125-154
+tests/test_client_schemas.py
+  18fc15e3fec4eb8e 27,434-438,461,485,511,539-630
+src/droid_sdk/client.py
+  18fc15e3fec4eb8e 107,122-123,331,366,409-412,426
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "af20aea0284f20bda9e420c08121519488d29c3c",
+  "prompts": {
+    "18fc15e3fec4eb8e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "d29f41ec-6674-4f25-b1c9-f146315563ed",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 264,
+      "total_deletions": 9,
+      "accepted_lines": 256,
+      "overriden_lines": 0
+    }
+  }
+}
