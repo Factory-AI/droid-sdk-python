@@ -41,6 +41,8 @@ from droid_sdk import (
     SessionSettingsUpdate,
     StreamEvent,
     StreamMessage,
+    SystemPromptConfig,
+    SystemPromptPreset,
     TextBlock,
     TextDelta,
     ToolCategory,
@@ -90,6 +92,19 @@ assert_type(settings.disabled_tools, frozenset[str] | None)
 SessionConfig(disabled_tools={"Execute"})
 SessionConfig(disabled_tools=["Execute"])
 SessionConfig(disabled_tools=("Execute",))
+
+system_prompt_preset = SystemPromptPreset(
+    type="preset",
+    preset="droid",
+    append="Prefer focused answers.",
+)
+system_prompt: SystemPromptConfig = system_prompt_preset
+system_prompt_config = SessionConfig(system_prompt=system_prompt)
+assert_type(
+    system_prompt_config.system_prompt,
+    SystemPromptConfig | None,
+)
+SessionConfig(system_prompt="Act as a dependency analyst.")
 
 settings_update = SessionSettingsUpdate(model="claude-sonnet")
 assert_type(settings_update.model, str | None)

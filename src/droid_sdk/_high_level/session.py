@@ -26,6 +26,7 @@ from droid_sdk._high_level._convert import (
     raw_inner_notification,
     wire_reasoning,
     wire_source,
+    wire_system_prompt,
     wire_tags,
 )
 from droid_sdk._high_level._immutable import JsonObject
@@ -433,6 +434,7 @@ class Session(SessionOperationsMixin):
                     ),
                     model_id=self._model,
                     reasoning_effort=wire_reasoning(self._reasoning_effort),
+                    system_prompt=wire_system_prompt(self._config.system_prompt),
                     spec_mode_model_id=self._config.spec_model,
                     spec_mode_reasoning_effort=wire_reasoning(
                         self._config.spec_reasoning_effort

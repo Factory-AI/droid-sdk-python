@@ -36,6 +36,8 @@ from droid_sdk._high_level.config import (
     SessionSettingsUpdate,
     SessionSource,
     SessionTag,
+    SystemPromptConfig,
+    SystemPromptPreset,
     UpdateSettingsResult,
 )
 from droid_sdk._high_level.discovery import list_sessions
@@ -302,6 +304,8 @@ __all__: list[str] = [
     "StreamIncompleteError",
     "StreamMessage",
     "StructuredOutputError",
+    "SystemPromptConfig",
+    "SystemPromptPreset",
     "TextBlock",
     "TextComplete",
     "TextDelta",

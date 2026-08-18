@@ -104,6 +104,7 @@ from droid_sdk.schemas.enums import (
     SessionNotificationType,
     SettingsLevel,
 )
+from droid_sdk.schemas.session import SystemPromptPreset
 from droid_sdk.stream import (
     StreamMessage,
     TokenUsageUpdate,
@@ -117,6 +118,8 @@ from droid_sdk.types import DroidClientTransport  # noqa: TC001
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
+    from droid_sdk.schemas.session import SystemPromptConfig
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +328,7 @@ class DroidClient:
         autonomy_level: AutonomyLevel | None = None,
         model_id: str | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        system_prompt: SystemPromptConfig | dict[str, Any] | None = None,
         spec_mode_model_id: str | None = None,
         spec_mode_reasoning_effort: ReasoningEffort | None = None,
         decomp_session_type: DecompSessionType | None = None,
@@ -359,6 +363,7 @@ class DroidClient:
             autonomy_level: Autonomy level setting.
             model_id: Optional model ID.
             reasoning_effort: Optional reasoning effort level.
+            system_prompt: Optional creation-time behavioral prompt.
             spec_mode_model_id: Optional spec mode model ID.
             spec_mode_reasoning_effort: Optional spec mode reasoning effort.
             decomp_session_type: Session type for mission decomposition.
@@ -401,6 +406,11 @@ class DroidClient:
             if tags is not None
             else None
         )
+        validated_system_prompt = (
+            SystemPromptPreset.model_validate(system_prompt)
+            if isinstance(system_prompt, dict)
+            else system_prompt
+        )
         params = _serialize_params(
             InitializeSessionRequestParams(
                 machine_id=machine_id,
@@ -413,6 +423,7 @@ class DroidClient:
                 autonomy_level=autonomy_level,
                 model_id=model_id,
                 reasoning_effort=reasoning_effort,
+                system_prompt=validated_system_prompt,
                 spec_mode_model_id=spec_mode_model_id,
                 spec_mode_reasoning_effort=spec_mode_reasoning_effort,
                 decomp_session_type=decomp_session_type,

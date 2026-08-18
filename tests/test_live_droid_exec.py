@@ -42,15 +42,51 @@ async def _client(cwd: Path) -> AsyncIterator[DroidClient]:
         yield client
 
 
-async def _initialize(client: DroidClient, cwd: Path) -> str:
+async def _initialize(
+    client: DroidClient,
+    cwd: Path,
+    *,
+    system_prompt: str | dict[str, str] | None = None,
+) -> str:
     result = await asyncio.wait_for(
         client.initialize_session(
             machine_id="droid-sdk-python-live-tests",
             cwd=str(cwd),
+            system_prompt=system_prompt,
         ),
         timeout=_RPC_TIMEOUT,
     )
     return result.session_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("system_prompt", "expected"),
+    [
+        (
+            "When asked for TEST_CODE, reply with exactly REPLACEMENT_OK.",
+            "REPLACEMENT_OK",
+        ),
+        (
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": "When asked for TEST_CODE, reply with exactly APPEND_OK.",
+            },
+            "APPEND_OK",
+        ),
+    ],
+)
+async def test_live_custom_system_prompt(
+    tmp_path: Path,
+    system_prompt: str | dict[str, str],
+    expected: str,
+) -> None:
+    async with _client(tmp_path) as client:
+        await _initialize(client, tmp_path, system_prompt=system_prompt)
+        response = await _run_turn(client, "TEST_CODE")
+
+    assert response.strip() == expected
 
 
 async def _run_turn(client: DroidClient, text: str) -> str:

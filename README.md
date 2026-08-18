@@ -122,6 +122,36 @@ Use `list_tools()`, `list_skills()`, MCP operations, `context()`,
 `enter_spec()`/`leave_spec()`, `rename()`, and raw filtered
 `on_notification()` subscriptions for ongoing sessions.
 
+## Custom system prompts
+
+Configure a system prompt when creating a session. A string replaces Droid's
+standard behavioral prompt:
+
+```python
+from droid_sdk import SessionConfig
+
+config = SessionConfig(
+    system_prompt="Act as a focused dependency-analysis agent.",
+)
+```
+
+Use the Droid preset to retain the effective built-in prompt and append
+instructions:
+
+```python
+config = SessionConfig(
+    system_prompt={
+        "type": "preset",
+        "preset": "droid",
+        "append": "Prioritize security findings and cite relevant files.",
+    }
+)
+```
+
+Mandatory identity and model/tool guidance remain in both cases. The prompt is
+fixed at creation and persists locally across resume, fork, and compaction.
+Treat it as sensitive session data.
+
 ## Resume and replacement ownership
 
 ```python

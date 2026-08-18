@@ -155,6 +155,8 @@ def test_root_export_snapshot_is_exact() -> None:
         "StreamIncompleteError",
         "StreamMessage",
         "StructuredOutputError",
+        "SystemPromptConfig",
+        "SystemPromptPreset",
         "TextBlock",
         "TextComplete",
         "TextDelta",

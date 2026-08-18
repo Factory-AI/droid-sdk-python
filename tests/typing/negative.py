@@ -11,6 +11,7 @@ from droid_sdk import (
     QuestionRequest,
     RunResult,
     Session,
+    SessionConfig,
     SessionSettings,
     ToolInfo,
     ToolResultBlock,
@@ -26,6 +27,14 @@ class BadLogger:
 
 SessionSettings()
 SessionSettings(model=None, reasoning_effort=None)
+SessionConfig(
+    system_prompt={
+        "type": "preset",
+        "preset": "unknown",
+        "append": "prompt",
+    }
+)
+SessionConfig(system_prompt={"type": "preset", "preset": "droid"})
 ToolInfo(id="Read")
 ToolResultBlock(tool_use_id="tool-1", content=[object()])
 prepare_output_adapter(str)

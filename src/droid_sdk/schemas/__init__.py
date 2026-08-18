@@ -358,7 +358,11 @@ from droid_sdk.schemas.mission import (
     WorkerSelectedFeatureEntry,
     WorkerStartedEntry,
 )
-from droid_sdk.schemas.session import LastCallTokenUsage
+from droid_sdk.schemas.session import (
+    LastCallTokenUsage,
+    SystemPromptConfig,
+    SystemPromptPreset,
+)
 from droid_sdk.schemas.shared import (
     BaseNotification,
     BaseRequest,
@@ -693,6 +697,8 @@ __all__: list[str] = [  # noqa: RUF022
     "SessionCompactedNotification",
     "SessionWorkingDirectoryChangedNotification",
     "StructuredOutputNotification",
+    "SystemPromptConfig",
+    "SystemPromptPreset",
     "ThinkingTextCompleteNotification",
     "ToolCallNotification",
     "ToolExecutionHeartbeatNotification",

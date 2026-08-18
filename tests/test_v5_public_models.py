@@ -64,6 +64,8 @@ from droid_sdk import (
     SessionTag,
     StdioMcpServerConfig,
     StructuredOutputError,
+    SystemPromptConfig,
+    SystemPromptPreset,
     TextBlock,
     TextDocumentSource,
     ToolCategory,
@@ -314,6 +316,52 @@ def test_configuration_is_recursively_immutable() -> None:
     assert isinstance(config.tags[0].metadata, MappingProxyType)
     with pytest.raises(dataclasses.FrozenInstanceError):
         config.mode = Mode.AUTO  # type: ignore[misc]
+
+
+def test_system_prompt_configuration_is_validated_and_immutable() -> None:
+    preset = SystemPromptPreset(
+        type="preset",
+        preset="droid",
+        append="  Keep this exact.\n",
+    )
+    config = SessionConfig(system_prompt=preset)
+    preset["append"] = "changed"
+
+    assert config.system_prompt == {
+        "type": "preset",
+        "preset": "droid",
+        "append": "  Keep this exact.\n",
+    }
+    assert isinstance(config.system_prompt, MappingProxyType)
+    with pytest.raises(TypeError):
+        config.system_prompt["append"] = "changed"  # type: ignore[index, union-attr]
+
+    replacement: SystemPromptConfig = "  Replacement prompt.\n"
+    assert SessionConfig(system_prompt=replacement).system_prompt == replacement
+
+
+@pytest.mark.parametrize(
+    "system_prompt",
+    [
+        "",
+        " \n\t ",
+        {"type": "preset", "preset": "droid", "append": ""},
+        {"type": "preset", "preset": "droid", "append": " \n\t "},
+        {"type": "preset", "preset": "droid"},
+        {"type": "preset", "preset": "unknown", "append": "prompt"},
+        {
+            "type": "preset",
+            "preset": "droid",
+            "append": "prompt",
+            "extra": True,
+        },
+    ],
+)
+def test_system_prompt_configuration_rejects_invalid_values(
+    system_prompt: object,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        SessionConfig(system_prompt=system_prompt)  # type: ignore[arg-type]
 
 
 def test_tool_overrides_accept_any_iterable_and_reject_strings() -> None:
