@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated, Literal, TypeAlias
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 __all__ = [
     "LastCallTokenUsage",
     "SessionTag",
+    "SystemPromptConfig",
+    "SystemPromptPreset",
     "TokenUsage",
 ]
+
+
+SystemPromptContent: TypeAlias = Annotated[str, StringConstraints(pattern=r"\S")]
+
+
+class SystemPromptPreset(BaseModel):
+    """Droid's built-in behavioral prompt with appended instructions."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    type: Literal["preset"]
+    preset: Literal["droid"]
+    append: SystemPromptContent
+
+
+SystemPromptConfig: TypeAlias = SystemPromptContent | SystemPromptPreset
 
 
 class SessionTag(BaseModel):

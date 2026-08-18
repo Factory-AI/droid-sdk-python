@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, TypeAlias, TypedDict, cast
 
 from droid_sdk._high_level._immutable import (
     FrozenJsonObject,
@@ -32,6 +32,53 @@ _TOOL_SET_FIELDS = (
     "disabled_tools",
     "restrict_tools",
 )
+
+
+class SystemPromptPreset(TypedDict):
+    """Droid's built-in behavioral prompt with appended instructions."""
+
+    type: Literal["preset"]
+    preset: Literal["droid"]
+    append: str
+
+
+SystemPromptConfig: TypeAlias = str | SystemPromptPreset
+
+
+def _freeze_system_prompt(value: object) -> SystemPromptConfig | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if not value.strip():
+            raise ValueError("system_prompt content must not be empty")
+        return value
+    if not isinstance(value, Mapping):
+        raise TypeError("system_prompt must be a string or Droid preset mapping")
+
+    mapping = cast("Mapping[object, object]", value)
+    required_keys = {"type", "preset", "append"}
+    if set(mapping) != required_keys:
+        raise ValueError(
+            "system_prompt preset must contain exactly type, preset, and append"
+        )
+    if mapping.get("type") != "preset" or mapping.get("preset") != "droid":
+        raise ValueError("system_prompt preset must be the Droid preset")
+    append = mapping.get("append")
+    if not isinstance(append, str):
+        raise TypeError("system_prompt append content must be a string")
+    if not append.strip():
+        raise ValueError("system_prompt append content must not be empty")
+
+    return cast(
+        "SystemPromptConfig",
+        MappingProxyType(
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": append,
+            }
+        ),
+    )
 
 
 def freeze_tool_ids(name: str, items: Iterable[str] | None) -> frozenset[str] | None:
@@ -121,6 +168,7 @@ class SessionConfig:
     session_source: SessionSource | None = None
     auto_reject_permission_requests: bool | None = None
     disable_builtin_skills: bool | None = None
+    system_prompt: SystemPromptConfig | None = None
     additional_tools: Iterable[str] | None = None
     enabled_tools: Iterable[str] | None = None
     disabled_tools: Iterable[str] | None = None
@@ -129,6 +177,11 @@ class SessionConfig:
     def __post_init__(self) -> None:
         object.__setattr__(self, "mcp_servers", tuple(self.mcp_servers))
         object.__setattr__(self, "tags", tuple(self.tags))
+        object.__setattr__(
+            self,
+            "system_prompt",
+            _freeze_system_prompt(self.system_prompt),
+        )
         _freeze_tool_sets(self)
 
 
@@ -142,6 +195,7 @@ class SessionSettings:
     spec_reasoning_effort: ReasoningEffort | None = None
     tags: Sequence[SessionTag] = ()
     sandbox: SandboxSettings | None = None
+    system_prompt: SystemPromptConfig | None = None
     additional_tools: frozenset[str] | None = None
     enabled_tools: frozenset[str] | None = None
     disabled_tools: frozenset[str] | None = None
@@ -149,6 +203,11 @@ class SessionSettings:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tags", tuple(self.tags))
+        object.__setattr__(
+            self,
+            "system_prompt",
+            _freeze_system_prompt(self.system_prompt),
+        )
         _freeze_tool_sets(self)
 
 

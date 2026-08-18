@@ -338,7 +338,56 @@ the full contract.
 
 `SessionConfig` also accepts mode-specific models, MCP servers, tags, source
 attribution, `machine_id`, automatic permission rejection, and native-tool
-overrides. It does not expose a system-prompt API.
+overrides.
+
+### Customize the system prompt
+
+`SessionConfig.system_prompt` accepts a replacement string or a typed preset
+dictionary. A string replaces Droid's standard behavioral prompt:
+
+```python
+from droid_sdk import Session, SessionConfig
+
+config = SessionConfig(
+    system_prompt="Act as a focused dependency-analysis agent.",
+)
+
+async with Session(config=config) as session:
+    ...
+```
+
+The Droid preset keeps the effective built-in prompt and appends instructions:
+
+```python
+config = SessionConfig(
+    system_prompt={
+        "type": "preset",
+        "preset": "droid",
+        "append": "Prioritize security findings and cite relevant files.",
+    }
+)
+```
+
+The preset uses the prompt appropriate to the session, including specialized
+exec and Mission prompts. Mandatory Droid identity and model/tool guidance
+remain in both forms. Replacement and append content must contain at least one
+non-whitespace character; otherwise `SessionConfig` raises `ValueError`.
+Valid whitespace is preserved exactly.
+
+The prompt is fixed when the session is created. It cannot be supplied to
+`Session.resume()` or changed with `update_settings()`. Droid stores it in the
+local session settings and restores it across resume, fork, renderless exec,
+and compaction. Task subagents use their selected custom Droid prompt and
+subagent contract rather than inheriting the parent session's replacement
+prompt.
+
+Prompt content is excluded from cloud settings sync, but the model can repeat
+it in messages or thinking stored in the transcript. Treat both the session
+settings and transcript as sensitive.
+
+When opening a session, the SDK verifies that Droid accepted the prompt. If the
+installed Droid version does not support custom system prompts, it raises
+`SessionError` instead of silently running with the default prompt.
 
 ### Resume a saved session
 
@@ -502,6 +551,7 @@ first. Timestamps are timezone-aware.
 | `session_source` | `SessionSource \| None` |
 | `auto_reject_permission_requests` | `bool \| None` |
 | `disable_builtin_skills` | `bool \| None` |
+| `system_prompt` | `SystemPromptConfig \| None` |
 | `additional_tools` | `Iterable[str] \| None` |
 | `enabled_tools` | `Iterable[str] \| None` |
 | `disabled_tools` | `Iterable[str] \| None` |
@@ -525,7 +575,7 @@ first. Timestamps are timezone-aware.
 
 | Type | Fields |
 | --- | --- |
-| `SessionSettings` | `model`, `reasoning_effort`, `mode`, `autonomy`, `spec_model`, `spec_reasoning_effort`, `tags`, `sandbox`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools` |
+| `SessionSettings` | `model`, `reasoning_effort`, `mode`, `autonomy`, `spec_model`, `spec_reasoning_effort`, `tags`, `sandbox`, `system_prompt`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools` |
 | `SessionSettingsUpdate` | `model`, `reasoning_effort`, `mode`, `autonomy`, `spec_model`, `spec_reasoning_effort`, `tags`, `additional_tools`, `enabled_tools`, `disabled_tools`, `restrict_tools`, `compaction_threshold_check_enabled` |
 | `SandboxSettings` | `enabled: bool`, `mode: str \| None = None` |
 | `SessionTag` | `name`, `metadata` |
@@ -1648,6 +1698,8 @@ starts Droid.
 | `AskUserParseError` | `message`, `line` |
 | `SandboxSettings` | `enabled`, `mode` |
 | `SessionSettingsUpdate` | Partial settings notification documented above |
+| `SystemPromptConfig` | `str \| SystemPromptPreset` |
+| `SystemPromptPreset` | Typed dictionary with required `type="preset"`, `preset="droid"`, and nonblank `append` |
 
 ### Top-level functions
 
@@ -1791,6 +1843,7 @@ Run commands from the repository root:
 | --- | --- | --- |
 | Attachments | `uv run python examples/attachments.py` | Live image, text, and PDF turn |
 | Factory Router | `uv run python examples/factory_router.py` | Live routed turns with per-response model IDs |
+| Custom system prompt | `uv run python examples/custom_system_prompt.py` | Live turn with instructions appended to Droid's prompt |
 | Interaction helpers | `uv run python examples/interaction_helpers.py` | Offline typed responses |
 | Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
 | Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |

@@ -31,6 +31,7 @@ from droid_sdk import (
     TextDocumentSource,
 )
 from droid_sdk._util import cancellation_checkpoint
+from droid_sdk.errors import SessionError
 from droid_sdk.mcp import create_sdk_mcp_server
 from droid_sdk.observability import LogEvent, MetricEvent, Observability
 from droid_sdk.schemas.client import SessionSettings as WireSessionSettings
@@ -44,12 +45,13 @@ if TYPE_CHECKING:
     from droid_sdk.types import DroidClientTransport
 
 
-def wire_settings() -> WireSessionSettings:
+def wire_settings(system_prompt: object = None) -> WireSessionSettings:
     return WireSessionSettings(
         model_id="model",
         reasoning_effort=WireReasoningEffort.Medium,
         spec_mode_model_id="spec-model",
         spec_mode_reasoning_effort=WireReasoningEffort.High,
+        system_prompt=system_prompt,
         tags=[],
     )
 
@@ -77,6 +79,8 @@ class FakeClient:
     close_session_error: ClassVar[Exception | None] = None
     fail_send: ClassVar[bool] = False
     hang_interrupt: ClassVar[bool] = False
+    supports_system_prompt: ClassVar[bool] = True
+    load_system_prompt: ClassVar[object] = None
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
@@ -112,7 +116,12 @@ class FakeClient:
             self.remote_session_created.set()
         if self.remote_session_gate is not None:
             await self.remote_session_gate.wait()
-        return SimpleNamespace(session_id="session-1", settings=wire_settings())
+        return SimpleNamespace(
+            session_id="session-1",
+            settings=wire_settings(
+                kwargs.get("system_prompt") if self.supports_system_prompt else None
+            ),
+        )
 
     async def update_session_settings(self, **kwargs: Any) -> None:
         self.update_calls.append(kwargs)
@@ -183,7 +192,7 @@ class FakeClient:
         if self.fail_replacement_load and kwargs["session_id"] == "session-2":
             raise RuntimeError("replacement unavailable")
         return SimpleNamespace(
-            settings=wire_settings(),
+            settings=wire_settings(self.load_system_prompt),
             model_extra={},
         )
 
@@ -232,6 +241,8 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.close_session_error = None
     FakeClient.fail_send = False
     FakeClient.hang_interrupt = False
+    FakeClient.supports_system_prompt = True
+    FakeClient.load_system_prompt = None
     monkeypatch.setattr(session_module, "DroidClient", FakeClient)
 
 
@@ -268,6 +279,56 @@ async def test_session_is_lazy_and_context_manager_owns_cleanup() -> None:
     assert client.close_calls == 1
     with pytest.raises(SessionClosedError):
         await session.rename("closed")
+
+
+@pytest.mark.asyncio
+async def test_session_creates_with_custom_system_prompt() -> None:
+    preset = {
+        "type": "preset",
+        "preset": "droid",
+        "append": "Prioritize security findings.",
+    }
+    session = Session(
+        config=SessionConfig(system_prompt=preset),
+        runtime=runtime(),
+    )
+
+    await session.open()
+
+    client = FakeClient.instances[0]
+    wire_prompt = client.initialize_calls[0]["system_prompt"]
+    assert wire_prompt.model_dump() == preset
+    assert session.settings.system_prompt == preset
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_session_rejects_droid_without_custom_system_prompt_support() -> None:
+    FakeClient.supports_system_prompt = False
+    session = Session(
+        config=SessionConfig(system_prompt="Required behavioral constraint."),
+        runtime=runtime(),
+    )
+
+    with pytest.raises(SessionError, match="does not support custom system prompts"):
+        await session.open()
+
+    client = FakeClient.instances[0]
+    assert client.close_session_calls == 1
+    assert client.close_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_restores_but_does_not_resend_system_prompt() -> None:
+    FakeClient.load_system_prompt = "Persisted replacement prompt."
+    session = Session.resume("session-1", runtime=runtime())
+
+    await session.open()
+
+    client = FakeClient.instances[0]
+    assert "system_prompt" not in client.load_calls[0]
+    assert session.settings.system_prompt == "Persisted replacement prompt."
+    await session.close()
 
 
 @pytest.mark.asyncio

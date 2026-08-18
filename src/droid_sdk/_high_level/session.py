@@ -26,6 +26,7 @@ from droid_sdk._high_level._convert import (
     raw_inner_notification,
     wire_reasoning,
     wire_source,
+    wire_system_prompt,
     wire_tags,
 )
 from droid_sdk._high_level._immutable import JsonObject
@@ -69,6 +70,7 @@ from droid_sdk.errors import (
     InvalidWorkingDirectoryError,
     SessionBusyError,
     SessionClosedError,
+    SessionError,
     SessionNotOpenError,
     SessionReplacedError,
     SessionReplacementError,
@@ -433,6 +435,7 @@ class Session(SessionOperationsMixin):
                     ),
                     model_id=self._model,
                     reasoning_effort=wire_reasoning(self._reasoning_effort),
+                    system_prompt=wire_system_prompt(self._config.system_prompt),
                     spec_mode_model_id=self._config.spec_model,
                     spec_mode_reasoning_effort=wire_reasoning(
                         self._config.spec_reasoning_effort
@@ -451,6 +454,14 @@ class Session(SessionOperationsMixin):
                 session_id = initialize_result.session_id
                 cwd_value = requested_cwd
                 wire_settings = initialize_result.settings
+                if (
+                    self._config.system_prompt is not None
+                    and wire_settings.system_prompt is None
+                ):
+                    raise SessionError(
+                        "The installed Droid version does not support custom "
+                        "system prompts. Update Droid and try again."
+                    )
 
             self._client = client
             self._id = session_id

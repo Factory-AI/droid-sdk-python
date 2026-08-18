@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from droid_sdk import ToolConfirmationOutcome
+from droid_sdk import (
+    Runtime,
+    Session,
+    SessionConfig,
+    SystemPromptConfig,
+    ToolConfirmationOutcome,
+    run,
+)
+from droid_sdk.errors import SessionError
 from droid_sdk.low_level import DroidClient, ProcessTransport
 from droid_sdk.stream import AssistantTextDelta, TurnComplete
 
@@ -28,6 +36,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 _EXEC_PATH = os.environ.get("DROID_EXEC_PATH", "droid")
+_OLD_EXEC_PATH = os.environ.get("DROID_OLD_EXEC_PATH")
 _TURN_TIMEOUT = 180.0
 _RPC_TIMEOUT = 180.0
 
@@ -42,15 +51,72 @@ async def _client(cwd: Path) -> AsyncIterator[DroidClient]:
         yield client
 
 
-async def _initialize(client: DroidClient, cwd: Path) -> str:
+async def _initialize(
+    client: DroidClient,
+    cwd: Path,
+    *,
+    system_prompt: str | dict[str, str] | None = None,
+) -> str:
     result = await asyncio.wait_for(
         client.initialize_session(
             machine_id="droid-sdk-python-live-tests",
             cwd=str(cwd),
+            system_prompt=system_prompt,
         ),
         timeout=_RPC_TIMEOUT,
     )
     return result.session_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("system_prompt", "expected"),
+    [
+        (
+            "When asked for TEST_CODE, reply with exactly REPLACEMENT_OK.",
+            "REPLACEMENT_OK",
+        ),
+        (
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": "When asked for TEST_CODE, reply with exactly APPEND_OK.",
+            },
+            "APPEND_OK",
+        ),
+    ],
+)
+async def test_live_custom_system_prompt(
+    tmp_path: Path,
+    system_prompt: SystemPromptConfig,
+    expected: str,
+) -> None:
+    result = await run(
+        "TEST_CODE",
+        cwd=tmp_path,
+        config=SessionConfig(system_prompt=system_prompt),
+        runtime=Runtime(executable=_EXEC_PATH),
+        timeout=_TURN_TIMEOUT,
+    )
+
+    assert result.success
+    assert result.text.strip() == expected
+
+
+@pytest.mark.skipif(
+    _OLD_EXEC_PATH is None,
+    reason="set DROID_OLD_EXEC_PATH to test the unsupported-version guard",
+)
+@pytest.mark.asyncio
+async def test_live_old_droid_rejects_custom_system_prompt(tmp_path: Path) -> None:
+    session = Session(
+        cwd=tmp_path,
+        config=SessionConfig(system_prompt="Required behavioral constraint."),
+        runtime=Runtime(executable=_OLD_EXEC_PATH),
+    )
+
+    with pytest.raises(SessionError, match="does not support custom system prompts"):
+        await session.open()
 
 
 async def _run_turn(client: DroidClient, text: str) -> str:

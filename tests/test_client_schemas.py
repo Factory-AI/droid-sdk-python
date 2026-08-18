@@ -24,6 +24,7 @@ from droid_sdk.schemas.client import (
     ClearMcpAuthResult,
     ClientRequest,
     DocumentSource,
+    ForkSessionRequestParams,
     GitRepoInfo,
     HttpHeader,
     HttpMcpConfig,
@@ -430,6 +431,11 @@ class TestInitializeSessionRequestParams:
             autonomy_level=AutonomyLevel.High,
             model_id="claude-sonnet-4",
             reasoning_effort=ReasoningEffort.High,
+            system_prompt={
+                "type": "preset",
+                "preset": "droid",
+                "append": "Prefer focused answers.",
+            },
             spec_mode_model_id="claude-opus-4",
             spec_mode_reasoning_effort=ReasoningEffort.Max,
             decomp_session_type=DecompSessionType.Orchestrator,
@@ -452,6 +458,7 @@ class TestInitializeSessionRequestParams:
         assert p.autonomy_level == AutonomyLevel.High
         assert p.model_id == "claude-sonnet-4"
         assert p.reasoning_effort == ReasoningEffort.High
+        assert p.system_prompt is not None
         assert p.spec_mode_model_id == "claude-opus-4"
         assert p.spec_mode_reasoning_effort == ReasoningEffort.Max
         assert p.decomp_session_type == DecompSessionType.Orchestrator
@@ -475,6 +482,7 @@ class TestInitializeSessionRequestParams:
             autonomy_level=AutonomyLevel.Low,
             model_id="m",
             reasoning_effort=ReasoningEffort.Low,
+            system_prompt="  Keep this exact.\n",
             spec_mode_model_id="sm",
             spec_mode_reasoning_effort=ReasoningEffort.Medium,
             decomp_session_type=DecompSessionType.Worker,
@@ -500,6 +508,7 @@ class TestInitializeSessionRequestParams:
             "autonomyLevel",
             "modelId",
             "reasoningEffort",
+            "systemPrompt",
             "specModeModelId",
             "specModeReasoningEffort",
             "decompSessionType",
@@ -526,6 +535,99 @@ class TestInitializeSessionRequestParams:
         )
         assert p.machine_id == "m1"
         assert p.model_id == "claude-sonnet-4"
+
+    @pytest.mark.parametrize(
+        ("system_prompt", "expected"),
+        [
+            ("  Replacement prompt.\n", "  Replacement prompt.\n"),
+            (
+                {
+                    "type": "preset",
+                    "preset": "droid",
+                    "append": "  Appended prompt.\n",
+                },
+                {
+                    "type": "preset",
+                    "preset": "droid",
+                    "append": "  Appended prompt.\n",
+                },
+            ),
+        ],
+    )
+    def test_system_prompt_serializes_exactly(
+        self,
+        system_prompt: object,
+        expected: object,
+    ) -> None:
+        params = InitializeSessionRequestParams.model_validate(
+            {
+                "machineId": "m1",
+                "cwd": "/home",
+                "systemPrompt": system_prompt,
+            }
+        )
+        assert (
+            params.model_dump(
+                by_alias=True,
+                exclude_none=True,
+            )["systemPrompt"]
+            == expected
+        )
+
+    @pytest.mark.parametrize(
+        "system_prompt",
+        [
+            "",
+            " \n\t ",
+            {"type": "preset", "preset": "droid", "append": ""},
+            {"type": "preset", "preset": "droid", "append": " \n\t "},
+            {"type": "preset", "preset": "droid"},
+            {"type": "preset", "preset": "unknown", "append": "prompt"},
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": "prompt",
+                "extra": True,
+            },
+        ],
+    )
+    def test_system_prompt_rejects_invalid_values(
+        self,
+        system_prompt: object,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            InitializeSessionRequestParams.model_validate(
+                {
+                    "machineId": "m1",
+                    "cwd": "/home",
+                    "systemPrompt": system_prompt,
+                }
+            )
+
+    @pytest.mark.parametrize(
+        ("schema", "payload"),
+        [
+            (
+                LoadSessionRequestParams,
+                {"sessionId": "session", "systemPrompt": "Not loadable."},
+            ),
+            (
+                ForkSessionRequestParams,
+                {"systemPrompt": "Not forkable."},
+            ),
+            (
+                UpdateSessionSettingsRequestParams,
+                {"systemPrompt": "Not updatable."},
+            ),
+        ],
+    )
+    def test_system_prompt_is_creation_only(
+        self,
+        schema: type[object],
+        payload: dict[str, object],
+    ) -> None:
+        with pytest.raises(ValidationError):
+            TypeAdapter(schema).validate_python(payload)
 
 
 class TestLoadSessionRequestParams:

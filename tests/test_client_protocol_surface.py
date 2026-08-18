@@ -495,6 +495,56 @@ class TestRewind:
 
 class TestNewRequestFields:
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("system_prompt", "expected"),
+        [
+            ("  Replacement prompt.\n", "  Replacement prompt.\n"),
+            (
+                {
+                    "type": "preset",
+                    "preset": "droid",
+                    "append": "  Appended prompt.\n",
+                },
+                {
+                    "type": "preset",
+                    "preset": "droid",
+                    "append": "  Appended prompt.\n",
+                },
+            ),
+        ],
+    )
+    async def test_initialize_session_sends_system_prompt(
+        self,
+        system_prompt: object,
+        expected: object,
+    ) -> None:
+        transport = InMemoryTransport()
+        client = DroidClient(transport=transport)
+        await client.connect()
+
+        sent, _ = await _call(
+            transport,
+            client.initialize_session(
+                machine_id="m",
+                cwd="/tmp",
+                system_prompt=system_prompt,  # type: ignore[arg-type]
+            ),
+            {
+                "sessionId": "sess-1",
+                "session": {"id": "sess-1", "messages": []},
+                "settings": {
+                    "modelId": "model-1",
+                    "reasoningEffort": "medium",
+                    "systemPrompt": expected,
+                },
+            },
+        )
+
+        assert sent["params"]["systemPrompt"] == expected
+
+        await client.close()
+
+    @pytest.mark.asyncio
     async def test_initialize_session_sends_all_tool_control_settings(self) -> None:
         transport = InMemoryTransport()
         client = DroidClient(transport=transport)
@@ -523,6 +573,7 @@ class TestNewRequestFields:
         assert sent["params"]["restrictToolIds"] == []
         assert sent["params"]["autoRejectPermissionRequests"] is False
         assert sent["params"]["disableBuiltinSkills"] is False
+        assert "systemPrompt" not in sent["params"]
 
         await client.close()
 

@@ -25,6 +25,8 @@ from droid_sdk._high_level.config import (
     SessionSettingsUpdate,
     SessionSource,
     SessionTag,
+    SystemPromptConfig,
+    SystemPromptPreset,
 )
 from droid_sdk._high_level.enums import (
     Autonomy,
@@ -61,6 +63,8 @@ from droid_sdk.schemas.client import McpOAuthOptions as WireMcpOAuthOptions
 from droid_sdk.schemas.client import SessionSettings as WireSessionSettings
 from droid_sdk.schemas.enums import ReasoningEffort as WireReasoningEffort
 from droid_sdk.schemas.enums import SessionNotificationType
+from droid_sdk.schemas.session import SystemPromptConfig as WireSystemPromptConfig
+from droid_sdk.schemas.session import SystemPromptPreset as WireSystemPromptPreset
 
 if TYPE_CHECKING:
     from droid_sdk.schemas.mcp import McpServerStatusInfo as WireMcpServerStatusInfo
@@ -102,6 +106,26 @@ def wire_tags(values: Sequence[SessionTag]) -> list[dict[str, Any]]:
         }
         for value in values
     ]
+
+
+def wire_system_prompt(
+    value: SystemPromptConfig | None,
+) -> WireSystemPromptConfig | None:
+    if value is None or isinstance(value, str):
+        return value
+    return WireSystemPromptPreset.model_validate(dict(value))
+
+
+def system_prompt_from_wire(
+    value: WireSystemPromptConfig | None,
+) -> SystemPromptConfig | None:
+    if value is None or isinstance(value, str):
+        return value
+    return SystemPromptPreset(
+        type=value.type,
+        preset=value.preset,
+        append=value.append,
+    )
 
 
 def mcp_config_to_wire(value: McpServerConfig) -> dict[str, Any]:
@@ -348,6 +372,7 @@ def full_settings_from_wire(value: WireSessionSettings) -> SessionSettings:
         spec_model=update.spec_model,
         spec_reasoning_effort=update.spec_reasoning_effort,
         tags=update.tags or (),
+        system_prompt=system_prompt_from_wire(value.system_prompt),
         sandbox=(
             None
             if sandbox is None

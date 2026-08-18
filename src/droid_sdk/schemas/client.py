@@ -63,6 +63,7 @@ from droid_sdk.schemas.mission import (  # noqa: TC001
 from droid_sdk.schemas.session import (
     LastCallTokenUsage,
     SessionTag,
+    SystemPromptConfig,
     TokenUsage,
 )
 from droid_sdk.schemas.shared import (
@@ -743,6 +744,9 @@ class SessionSettings(BaseModel):
     )
     """Optional spec mode reasoning effort override."""
 
+    system_prompt: SystemPromptConfig | None = Field(default=None, alias="systemPrompt")
+    """Custom behavioral prompt captured when the session was created."""
+
     tags: list[SessionTag] | None = None
     sandbox: SandboxStatus | None = None
     compaction_threshold_check_enabled: bool | None = Field(
@@ -938,6 +942,9 @@ class InitializeSessionRequestParams(BaseModel):
         default=None, alias="reasoningEffort"
     )
     """Optional reasoning effort level."""
+
+    system_prompt: SystemPromptConfig | None = Field(default=None, alias="systemPrompt")
+    """Optional creation-time behavioral prompt."""
 
     spec_mode_model_id: str | None = Field(default=None, alias="specModeModelId")
     """Optional spec mode model ID."""
