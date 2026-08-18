@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from droid_sdk import (
-    DroidSystemPrompt,
     FrozenJsonObject,
     FrozenJsonValue,
     PermissionHandler,
@@ -28,8 +27,14 @@ class BadLogger:
 
 SessionSettings()
 SessionSettings(model=None, reasoning_effort=None)
-SessionConfig(system_prompt={"append": "prompt"})
-DroidSystemPrompt(append=1)
+SessionConfig(
+    system_prompt={
+        "type": "preset",
+        "preset": "unknown",
+        "append": "prompt",
+    }
+)
+SessionConfig(system_prompt={"type": "preset", "preset": "droid"})
 ToolInfo(id="Read")
 ToolResultBlock(tool_use_id="tool-1", content=[object()])
 prepare_output_adapter(str)

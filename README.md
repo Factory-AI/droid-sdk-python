@@ -135,16 +135,16 @@ config = SessionConfig(
 )
 ```
 
-Use `DroidSystemPrompt` to retain the effective built-in prompt and append
+Use the Droid preset to retain the effective built-in prompt and append
 instructions:
 
 ```python
-from droid_sdk import DroidSystemPrompt, SessionConfig
-
 config = SessionConfig(
-    system_prompt=DroidSystemPrompt(
-        append="Prioritize security findings and cite relevant files."
-    )
+    system_prompt={
+        "type": "preset",
+        "preset": "droid",
+        "append": "Prioritize security findings and cite relevant files.",
+    }
 )
 ```
 

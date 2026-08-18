@@ -28,7 +28,6 @@ from droid_sdk._high_level.attachments import (
     TextDocumentSource,
 )
 from droid_sdk._high_level.config import (
-    DroidSystemPrompt,
     JsonSchema,
     SandboxSettings,
     SavedSession,
@@ -38,6 +37,7 @@ from droid_sdk._high_level.config import (
     SessionSource,
     SessionTag,
     SystemPromptConfig,
+    SystemPromptPreset,
     UpdateSettingsResult,
 )
 from droid_sdk._high_level.discovery import list_sessions
@@ -203,7 +203,6 @@ __all__: list[str] = [
     "DroidError",
     "DroidProcessError",
     "DroidProtocolError",
-    "DroidSystemPrompt",
     "DroidShieldViolationAction",
     "DroidTool",
     "EditAction",
@@ -306,6 +305,7 @@ __all__: list[str] = [
     "StreamMessage",
     "StructuredOutputError",
     "SystemPromptConfig",
+    "SystemPromptPreset",
     "TextBlock",
     "TextComplete",
     "TextDelta",

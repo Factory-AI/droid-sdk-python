@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from droid_sdk import (
-    DroidSystemPrompt,
     Runtime,
     Session,
     SessionConfig,
@@ -78,9 +77,11 @@ async def _initialize(
             "REPLACEMENT_OK",
         ),
         (
-            DroidSystemPrompt(
-                append="When asked for TEST_CODE, reply with exactly APPEND_OK."
-            ),
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": "When asked for TEST_CODE, reply with exactly APPEND_OK.",
+            },
             "APPEND_OK",
         ),
     ],

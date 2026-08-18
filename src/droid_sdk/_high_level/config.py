@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias, TypedDict, cast
 
 from droid_sdk._high_level._immutable import (
     FrozenJsonObject,
@@ -34,35 +34,51 @@ _TOOL_SET_FIELDS = (
 )
 
 
-def _validate_prompt_content(value: object, *, name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{name} content must be a string")
-    if not value.strip():
-        raise ValueError(f"{name} content must not be empty")
-    return value
-
-
-@dataclass(frozen=True, slots=True)
-class DroidSystemPrompt:
+class SystemPromptPreset(TypedDict):
     """Droid's built-in behavioral prompt with appended instructions."""
 
+    type: Literal["preset"]
+    preset: Literal["droid"]
     append: str
 
-    def __post_init__(self) -> None:
-        _validate_prompt_content(self.append, name="system prompt append")
+
+SystemPromptConfig: TypeAlias = str | SystemPromptPreset
 
 
-SystemPromptConfig: TypeAlias = str | DroidSystemPrompt
-
-
-def _validate_system_prompt(value: object) -> SystemPromptConfig | None:
+def _freeze_system_prompt(value: object) -> SystemPromptConfig | None:
     if value is None:
         return None
     if isinstance(value, str):
-        return _validate_prompt_content(value, name="system_prompt")
-    if isinstance(value, DroidSystemPrompt):
+        if not value.strip():
+            raise ValueError("system_prompt content must not be empty")
         return value
-    raise TypeError("system_prompt must be a string or DroidSystemPrompt")
+    if not isinstance(value, Mapping):
+        raise TypeError("system_prompt must be a string or Droid preset mapping")
+
+    mapping = cast("Mapping[object, object]", value)
+    required_keys = {"type", "preset", "append"}
+    if set(mapping) != required_keys:
+        raise ValueError(
+            "system_prompt preset must contain exactly type, preset, and append"
+        )
+    if mapping.get("type") != "preset" or mapping.get("preset") != "droid":
+        raise ValueError("system_prompt preset must be the Droid preset")
+    append = mapping.get("append")
+    if not isinstance(append, str):
+        raise TypeError("system_prompt append content must be a string")
+    if not append.strip():
+        raise ValueError("system_prompt append content must not be empty")
+
+    return cast(
+        "SystemPromptConfig",
+        MappingProxyType(
+            {
+                "type": "preset",
+                "preset": "droid",
+                "append": append,
+            }
+        ),
+    )
 
 
 def freeze_tool_ids(name: str, items: Iterable[str] | None) -> frozenset[str] | None:
@@ -164,7 +180,7 @@ class SessionConfig:
         object.__setattr__(
             self,
             "system_prompt",
-            _validate_system_prompt(self.system_prompt),
+            _freeze_system_prompt(self.system_prompt),
         )
         _freeze_tool_sets(self)
 
@@ -190,7 +206,7 @@ class SessionSettings:
         object.__setattr__(
             self,
             "system_prompt",
-            _validate_system_prompt(self.system_prompt),
+            _freeze_system_prompt(self.system_prompt),
         )
         _freeze_tool_sets(self)
 

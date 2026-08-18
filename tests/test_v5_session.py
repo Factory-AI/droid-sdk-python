@@ -11,7 +11,6 @@ import droid_sdk._high_level.session as session_module
 from droid_sdk import (
     Document,
     DroidConnectionError,
-    DroidSystemPrompt,
     ErrorEvent,
     ErrorType,
     HttpHeader,
@@ -284,7 +283,11 @@ async def test_session_is_lazy_and_context_manager_owns_cleanup() -> None:
 
 @pytest.mark.asyncio
 async def test_session_creates_with_custom_system_prompt() -> None:
-    preset = DroidSystemPrompt(append="Prioritize security findings.")
+    preset = {
+        "type": "preset",
+        "preset": "droid",
+        "append": "Prioritize security findings.",
+    }
     session = Session(
         config=SessionConfig(system_prompt=preset),
         runtime=runtime(),
@@ -294,11 +297,7 @@ async def test_session_creates_with_custom_system_prompt() -> None:
 
     client = FakeClient.instances[0]
     wire_prompt = client.initialize_calls[0]["system_prompt"]
-    assert wire_prompt.model_dump() == {
-        "type": "preset",
-        "preset": "droid",
-        "append": preset.append,
-    }
+    assert wire_prompt.model_dump() == preset
     assert session.settings.system_prompt == preset
     await session.close()
 
