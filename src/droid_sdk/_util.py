@@ -7,7 +7,7 @@ import contextlib
 from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Coroutine
 
 T = TypeVar("T")
 
@@ -33,6 +33,16 @@ async def wait_shielded(
     except asyncio.CancelledError:
         if on_cancelled is not None:
             await on_cancelled(task)
+        raise
+
+
+async def run_to_completion(operation: Coroutine[Any, Any, T]) -> T:
+    """Run an async cleanup operation to completion despite caller cancellation."""
+    task = asyncio.create_task(operation)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
         raise
 
 

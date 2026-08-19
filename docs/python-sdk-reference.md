@@ -218,9 +218,16 @@ The keyword-only arguments are:
 | `runtime` | `Runtime \| None` | Configure the executable, arguments, environment, transport, and observability |
 | `api_key` | `str \| None` | Override `FACTORY_API_KEY` for the one-shot process |
 
+`cwd` defaults to the current directory and is resolved to a canonical absolute
+directory before Droid starts.
+
 When `runtime.transport` is supplied, that transport already owns its process
 context and authentication. Passing `cwd` or `api_key` at the same time raises
 `ValueError`.
+
+If the installed Droid version does not support model discovery,
+`list_models()` raises an actionable `DroidProtocolError` asking the caller to
+update Droid.
 
 Each immutable `ModelInfo` contains:
 

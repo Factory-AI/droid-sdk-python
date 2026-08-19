@@ -11,7 +11,9 @@ from droid_sdk._high_level._client import (
 )
 from droid_sdk._high_level.enums import ModelProvider, ReasoningEffort
 from droid_sdk._high_level.runtime import Runtime
+from droid_sdk.errors import DroidProtocolError
 from droid_sdk.observability import ObservabilityAdapter
+from droid_sdk.schemas.enums import JsonRpcErrorCode
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -88,7 +90,7 @@ async def list_models(
 ) -> list[ModelInfo]:
     """List models currently selectable by a one-shot Droid process."""
     runtime_config = runtime or Runtime()
-    if runtime_config.transport is not None:
+    if runtime_config.uses_supplied_transport:
         if cwd is not None:
             raise ValueError("cwd cannot be used with a supplied transport")
         if api_key is not None:
@@ -101,9 +103,19 @@ async def list_models(
         cwd=working_directory,
         observability=observability_adapter,
     ) as client:
-        result = await client.list_models(
-            include_disabled=True if include_disabled else None
-        )
+        try:
+            result = await client.list_models(
+                include_disabled=True if include_disabled else None
+            )
+        except DroidProtocolError as exc:
+            if exc.code != JsonRpcErrorCode.METHOD_NOT_FOUND.value:
+                raise
+            raise DroidProtocolError(
+                "The installed Droid version does not support model discovery. "
+                "Update Droid and try again.",
+                code=exc.code,
+                data=exc.data,
+            ) from exc
         return [_model_from_wire(model) for model in result.models]
 
 

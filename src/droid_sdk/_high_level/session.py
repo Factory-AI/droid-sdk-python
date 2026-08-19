@@ -64,6 +64,7 @@ from droid_sdk._util import (
     cancel_and_drain,
     cancellation_checkpoint,
     consume_task_result,
+    run_to_completion,
     wait_shielded,
 )
 from droid_sdk.client import DroidClient
@@ -446,10 +447,26 @@ class Session(SessionOperationsMixin):
             )
             if client is not None:
                 if session_start_attempted:
-                    with contextlib.suppress(BaseException):
-                        await client.close_session(reason="other")
-                with contextlib.suppress(BaseException):
-                    await client.close()
+                    try:
+                        await run_to_completion(client.close_session(reason="other"))
+                    except BaseException as cleanup_error:
+                        self._observability.log(
+                            level="error",
+                            name="droid.sdk.session.close",
+                            message="Droid session cleanup failed",
+                            attributes={"status": "error"},
+                            error=cleanup_error,
+                        )
+                try:
+                    await run_to_completion(client.close())
+                except BaseException as cleanup_error:
+                    self._observability.log(
+                        level="error",
+                        name="droid.sdk.client.close",
+                        message="Droid client cleanup failed",
+                        attributes={"status": "error"},
+                        error=cleanup_error,
+                    )
             await asyncio.gather(
                 *(server.close() for server in started), return_exceptions=True
             )
@@ -1124,12 +1141,7 @@ async def run(
                 pass
         return stream.result
     finally:
-        close_task = asyncio.create_task(session.close())
-        try:
-            await asyncio.shield(close_task)
-        except asyncio.CancelledError:
-            await close_task
-            raise
+        await run_to_completion(session.close())
 
 
 __all__ = ["Session", "run"]

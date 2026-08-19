@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from droid_sdk._util import run_to_completion
 from droid_sdk.client import DroidClient
 from droid_sdk.errors import (
     DroidConnectionError,
@@ -104,7 +104,7 @@ async def _close_after_failure(
     observability: ObservabilityAdapter,
 ) -> None:
     try:
-        await close_droid_client(client)
+        await run_to_completion(client.close())
     except BaseException as exc:
         observability.log(
             level="error",
@@ -113,16 +113,6 @@ async def _close_after_failure(
             attributes={"status": "error"},
             error=exc,
         )
-
-
-async def close_droid_client(client: DroidClient) -> None:
-    """Close a client to completion without swallowing cleanup failures."""
-    close_task = asyncio.create_task(client.close())
-    try:
-        await asyncio.shield(close_task)
-    except asyncio.CancelledError:
-        await close_task
-        raise
 
 
 @asynccontextmanager
@@ -145,7 +135,7 @@ async def managed_droid_client(
     except BaseException:
         await _close_after_failure(client, observability)
         raise
-    await close_droid_client(client)
+    await run_to_completion(client.close())
 
 
 __all__ = [

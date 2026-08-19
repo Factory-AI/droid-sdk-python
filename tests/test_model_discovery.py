@@ -18,13 +18,18 @@ from droid_sdk import (
     list_models,
 )
 from droid_sdk.client import DroidClient
-from droid_sdk.errors import DroidConnectionError, InvalidWorkingDirectoryError
+from droid_sdk.errors import (
+    DroidConnectionError,
+    DroidProtocolError,
+    InvalidWorkingDirectoryError,
+)
 from droid_sdk.low_level import (
     ClientRequest,
     DroidServerMethod,
     ListModelsRequest,
 )
 from droid_sdk.observability import LogEvent, Observability
+from droid_sdk.schemas.enums import JsonRpcErrorCode
 from droid_sdk.schemas.models import (
     ListModelsResult,
 )
@@ -283,6 +288,16 @@ class FailingClient(FakeClient):
         raise RuntimeError("catalog failed")
 
 
+class UnsupportedClient(FakeClient):
+    async def list_models(
+        self, *, include_disabled: bool | None = None
+    ) -> ListModelsResult:
+        raise DroidProtocolError(
+            "Unknown method: droid.list_models",
+            code=JsonRpcErrorCode.METHOD_NOT_FOUND.value,
+        )
+
+
 class CloseFailingClient(FakeClient):
     async def close(self) -> None:
         self.closed = True
@@ -302,6 +317,22 @@ class LogSink:
 
     def log(self, event: LogEvent) -> None:
         self.events.append(event)
+
+
+@pytest.mark.asyncio
+async def test_list_models_explains_unsupported_droid_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    UnsupportedClient.instances.clear()
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", UnsupportedClient)
+
+    with pytest.raises(DroidProtocolError, match="Update Droid") as raised:
+        await list_models(cwd=tmp_path)
+
+    assert raised.value.code == JsonRpcErrorCode.METHOD_NOT_FOUND.value
+    assert UnsupportedClient.instances[0].closed is True
 
 
 @pytest.mark.asyncio
