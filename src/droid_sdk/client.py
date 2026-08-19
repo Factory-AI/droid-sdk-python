@@ -1235,7 +1235,7 @@ class DroidClient:
         return SubmitBugReportResult.model_validate(response.get("result", {}))
 
     # ----------------------------------------------------------
-    # Tool / command discovery
+    # Model / tool / command discovery
     # ----------------------------------------------------------
 
     async def list_models(

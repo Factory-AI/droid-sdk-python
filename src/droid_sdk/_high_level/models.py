@@ -58,30 +58,33 @@ class ModelInfo:
             raise ValueError("enabled models must not include disabled_reason")
 
 
-def _model_from_wire(value: WireModelInfo) -> ModelInfo:
+def _model_from_wire(wire_model: WireModelInfo) -> ModelInfo:
     return ModelInfo(
-        id=value.id,
-        display_name=value.display_name,
-        short_display_name=value.short_display_name,
-        model_provider=ModelProvider(value.model_provider.value),
+        id=wire_model.id,
+        display_name=wire_model.display_name,
+        short_display_name=wire_model.short_display_name,
+        model_provider=ModelProvider(wire_model.model_provider.value),
         supported_reasoning_efforts=tuple(
-            ReasoningEffort(item.value) for item in value.supported_reasoning_efforts
+            ReasoningEffort(effort.value)
+            for effort in wire_model.supported_reasoning_efforts
         ),
-        default_reasoning_effort=ReasoningEffort(value.default_reasoning_effort.value),
-        is_custom=value.is_custom,
-        disabled=value.disabled,
-        disabled_reason=value.disabled_reason,
-        no_image_support=value.no_image_support,
-        supports_image_generation=value.supports_image_generation,
-        tier=value.tier,
-        token_multiplier=value.token_multiplier,
-        promo_label=value.promo_label,
-        kind=value.kind,
-        variant_badge=value.variant_badge,
+        default_reasoning_effort=ReasoningEffort(
+            wire_model.default_reasoning_effort.value
+        ),
+        is_custom=wire_model.is_custom,
+        disabled=wire_model.disabled,
+        disabled_reason=wire_model.disabled_reason,
+        no_image_support=wire_model.no_image_support,
+        supports_image_generation=wire_model.supports_image_generation,
+        tier=wire_model.tier,
+        token_multiplier=wire_model.token_multiplier,
+        promo_label=wire_model.promo_label,
+        kind=wire_model.kind,
+        variant_badge=wire_model.variant_badge,
     )
 
 
-def _working_directory(value: str | Path | None) -> Path:
+def _resolve_working_directory(value: str | Path | None) -> Path:
     path = Path.cwd() if value is None else Path(value)
     try:
         if not path.is_dir():
@@ -110,9 +113,9 @@ async def list_models(
     api_key: str | None = None,
 ) -> list[ModelInfo]:
     """List models currently selectable by a one-shot Droid process."""
-    selected_cwd = _working_directory(cwd)
+    working_directory = _resolve_working_directory(cwd)
     runtime_config = runtime or Runtime()
-    adapter = ObservabilityAdapter(runtime_config.observability)
+    observability_adapter = ObservabilityAdapter(runtime_config.observability)
 
     if runtime_config.transport is not None:
         if not runtime_config.transport.is_connected:
@@ -138,14 +141,14 @@ async def list_models(
                 "stream-jsonrpc",
                 *runtime_config.args,
             ],
-            cwd=str(selected_cwd),
+            cwd=str(working_directory),
             env=env,
         )
 
     client = DroidClient(
         transport=transport,
-        trace_meta_injector=adapter.trace_meta_injector,
-        timing_callback=adapter.timing_callback,
+        trace_meta_injector=observability_adapter.trace_meta_injector,
+        timing_callback=observability_adapter.timing_callback,
     )
     try:
         try:
@@ -158,7 +161,7 @@ async def list_models(
                     if runtime_config.executable is None
                     else str(runtime_config.executable)
                 ),
-                cwd=str(selected_cwd),
+                cwd=str(working_directory),
             ) from exc
         result = await client.list_models(
             include_disabled=True if include_disabled else None

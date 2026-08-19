@@ -196,10 +196,9 @@ contract.
 ```python
 from droid_sdk import list_models
 
-models = await list_models()
-catalog = await list_models(include_disabled=True, cwd=project_dir)
+models = await list_models(include_disabled=True, cwd=project_dir)
 
-for model in catalog:
+for model in models:
     status = model.disabled_reason if model.disabled else "available"
     print(model.id, model.default_reasoning_effort, status)
 ```
