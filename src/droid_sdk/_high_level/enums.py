@@ -29,6 +29,16 @@ class ReasoningEffort(str, Enum):
     MAX = "max"
 
 
+class ModelProvider(str, Enum):
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    GENERIC_CHAT_COMPLETION_API = "generic-chat-completion-api"
+    FACTORY = "factory"
+    GOOGLE = "google"
+    XAI = "xai"
+    VOYAGE = "voyage"
+
+
 class ToolConfirmationOutcome(str, Enum):
     PROCEED_ONCE = "proceed_once"
     PROCEED_ALWAYS = "proceed_always"

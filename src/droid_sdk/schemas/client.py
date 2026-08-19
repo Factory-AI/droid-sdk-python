@@ -60,6 +60,10 @@ from droid_sdk.schemas.mission import (  # noqa: TC001
     MissionFeature,
     ProgressLogEntry,
 )
+from droid_sdk.schemas.models import (  # noqa: TC001
+    ListModelsOptions,
+    ListModelsResult,
+)
 from droid_sdk.schemas.session import (
     LastCallTokenUsage,
     SessionTag,
@@ -171,6 +175,8 @@ __all__ = [  # noqa: RUF022
     "ListMcpToolsRequestParams",
     "ListMcpToolsResponse",
     "ListMcpToolsResult",
+    "ListModelsRequest",
+    "ListModelsResponse",
     "ListSkillsRequest",
     "ListSkillsRequestParams",
     "ListSkillsResponse",
@@ -1670,6 +1676,14 @@ class SubmitBugReportRequest(JsonRpcRequest):
     """Typed request parameters."""
 
 
+class ListModelsRequest(JsonRpcRequest):
+    """Request to list models without initializing a session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.LIST_MODELS]
+    params: ListModelsOptions  # type: ignore[assignment]
+
+
 class ListToolsRequest(JsonRpcRequest):
     """Request to list native CLI tools."""
 
@@ -2506,6 +2520,11 @@ class _SubmitBugReportResponseSuccess(JsonRpcResponseSuccess):
     result: SubmitBugReportResult  # type: ignore[assignment]
 
 
+class _ListModelsResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ListModelsResult  # type: ignore[assignment]
+
+
 class _ListToolsResponseSuccess(JsonRpcResponseSuccess):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     result: ListToolsResult  # type: ignore[assignment]
@@ -2583,6 +2602,7 @@ ToggleMcpToolResponse = _ToggleMcpToolResponseSuccess | JsonRpcResponseFailure
 ListSkillsResponse = _ListSkillsResponseSuccess | JsonRpcResponseFailure
 SetSkillDisabledResponse = _SetSkillDisabledResponseSuccess | JsonRpcResponseFailure
 SubmitBugReportResponse = _SubmitBugReportResponseSuccess | JsonRpcResponseFailure
+ListModelsResponse = _ListModelsResponseSuccess | JsonRpcResponseFailure
 ListToolsResponse = _ListToolsResponseSuccess | JsonRpcResponseFailure
 ListCommandsResponse = _ListCommandsResponseSuccess | JsonRpcResponseFailure
 CloseSessionResponse = _CloseSessionResponseSuccess | JsonRpcResponseFailure
@@ -2623,6 +2643,7 @@ ClientRequestUnion = Annotated[
     | ListSkillsRequest
     | SetSkillDisabledRequest
     | SubmitBugReportRequest
+    | ListModelsRequest
     | ListToolsRequest
     | ListCommandsRequest
     | CloseSessionRequest

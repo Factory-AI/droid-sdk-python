@@ -104,6 +104,7 @@ from droid_sdk.schemas.enums import (
     SessionNotificationType,
     SettingsLevel,
 )
+from droid_sdk.schemas.models import ListModelsOptions, ListModelsResult
 from droid_sdk.schemas.session import SystemPromptPreset
 from droid_sdk.stream import (
     StreamMessage,
@@ -1236,6 +1237,25 @@ class DroidClient:
     # ----------------------------------------------------------
     # Tool / command discovery
     # ----------------------------------------------------------
+
+    async def list_models(
+        self,
+        *,
+        include_disabled: bool | None = None,
+    ) -> ListModelsResult:
+        """List models without initializing a session.
+
+        Disabled models are hidden by default. Set ``include_disabled`` to
+        include them with their disabled reason.
+        """
+        self._ensure_not_closed()
+        protocol = self._ensure_protocol()
+        params = _serialize_params(ListModelsOptions(include_disabled=include_disabled))
+        response = await protocol.send_request(
+            method=DroidServerMethod.LIST_MODELS.value,
+            params=params,
+        )
+        return ListModelsResult.model_validate(response.get("result", {}))
 
     async def list_tools(
         self,

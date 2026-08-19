@@ -191,6 +191,52 @@ await session.update_settings(
 See [Update settings](#update-settings) for the full `update_settings()`
 contract.
 
+### Discover available models
+
+```python
+from droid_sdk import list_models
+
+models = await list_models()
+catalog = await list_models(include_disabled=True, cwd=project_dir)
+
+for model in catalog:
+    status = model.disabled_reason if model.disabled else "available"
+    print(model.id, model.default_reasoning_effort, status)
+```
+
+`list_models()` starts a one-shot Droid process, requests the model catalog
+without creating a session, and closes the process before returning. It
+includes built-in and configured custom models after applying feature flags,
+region availability, and organization policy. Disabled models are hidden by
+default.
+
+The keyword-only arguments are:
+
+| Argument | Type | Purpose |
+| --- | --- | --- |
+| `include_disabled` | `bool` | Include disabled models with `disabled_reason` |
+| `cwd` | `str \| Path \| None` | Resolve project-specific settings from this directory |
+| `runtime` | `Runtime \| None` | Configure the executable, arguments, environment, transport, and observability |
+| `api_key` | `str \| None` | Override `FACTORY_API_KEY` for the one-shot process |
+
+Each immutable `ModelInfo` contains:
+
+| Field | Type |
+| --- | --- |
+| `id` | `str` |
+| `display_name`, `short_display_name` | `str` |
+| `model_provider` | `ModelProvider` |
+| `supported_reasoning_efforts` | `Sequence[ReasoningEffort]` |
+| `default_reasoning_effort` | `ReasoningEffort` |
+| `is_custom`, `disabled` | `bool` |
+| `disabled_reason` | `str \| None` |
+| `no_image_support`, `supports_image_generation` | `bool \| None` |
+| `tier`, `promo_label`, `kind`, `variant_badge` | `str \| None` |
+| `token_multiplier` | `float \| None` |
+
+`disabled_reason` is present only when `disabled` is true. Custom endpoint and
+credential configuration is never returned.
+
 ### Use the Factory Router
 
 The model ID `auto` selects the
@@ -1680,6 +1726,7 @@ starts Droid.
 | `executable` | `str \| Path \| None` |
 | `args` | `Sequence[str]` |
 | `env` | `Mapping[str, str]` |
+| `transport` | `Transport \| None` |
 | `observability` | `Observability \| None` |
 
 ## API index
@@ -1697,6 +1744,7 @@ starts Droid.
 | `ApplyPatchFile` | Per-file patch details documented above |
 | `AskUserParseError` | `message`, `line` |
 | `SandboxSettings` | `enabled`, `mode` |
+| `ModelInfo` | Immutable canonical model-discovery metadata |
 | `SessionSettingsUpdate` | Partial settings notification documented above |
 | `SystemPromptConfig` | `str \| SystemPromptPreset` |
 | `SystemPromptPreset` | Typed dictionary with required `type="preset"`, `preset="droid"`, and nonblank `append` |
@@ -1706,6 +1754,7 @@ starts Droid.
 | API | Returns | Purpose |
 | --- | --- | --- |
 | `run(prompt, **options)` | `RunResult[T]` | Run one turn |
+| `list_models(**options)` | `list[ModelInfo]` | List selectable models |
 | `list_sessions(**filters)` | `list[SavedSession]` | List saved sessions |
 
 | `run()` argument | Type |
@@ -1766,6 +1815,7 @@ starts Droid.
 | --- | --- |
 | `Mode` | `AUTO`, `SPEC` |
 | `Autonomy` | `OFF`, `LOW`, `MEDIUM`, `HIGH` |
+| `ModelProvider` | `ANTHROPIC`, `OPENAI`, `GENERIC_CHAT_COMPLETION_API`, `FACTORY`, `GOOGLE`, `XAI`, `VOYAGE` |
 | `ReasoningEffort` | See supported values below |
 | `ToolCategory` | `READ`, `EDIT`, `EXECUTE`, `OTHER` |
 | `ToolConfirmationType` | `EDIT`, `EXECUTE`, `CREATE`, `ASK_USER`, `EXIT_SPEC_MODE`, `APPLY_PATCH`, `MCP_TOOL`, `SANDBOX_VIOLATION`, `DROID_SHIELD_VIOLATION` |
@@ -1847,6 +1897,7 @@ Run commands from the repository root:
 | Interaction helpers | `uv run python examples/interaction_helpers.py` | Offline typed responses |
 | Interactions | `uv run python examples/interactions.py` | Live permission/question turn |
 | Interactive session | `uv run python examples/interactive_session.py` | Two live turns sharing history |
+| Model discovery | `uv run python examples/list_models.py` | Available and disabled model metadata |
 | Saved sessions | `uv run python examples/list_saved_sessions.py` | Local saved-session count |
 | Observability | `uv run python examples/observability.py` | Offline isolated sink counts |
 | One-shot run | `uv run python examples/one_shot.py` | Live one-turn result |

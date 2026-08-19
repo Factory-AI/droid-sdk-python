@@ -49,6 +49,7 @@ from droid_sdk._high_level.enums import (
     McpServerStatus,
     McpServerType,
     Mode,
+    ModelProvider,
     OAuthTokenEndpointAuthMethod,
     ReasoningEffort,
     SandboxOperation,
@@ -158,6 +159,7 @@ from droid_sdk._high_level.messages import (
     UserMessage,
     WorkingStateChanged,
 )
+from droid_sdk._high_level.models import ModelInfo, list_models
 from droid_sdk._high_level.runtime import Runtime, Transport
 from droid_sdk._high_level.session import Session, run
 from droid_sdk._high_level.streaming import RunStream
@@ -243,6 +245,8 @@ __all__: list[str] = [
     "McpToolInputSchema",
     "Message",
     "Mode",
+    "ModelInfo",
+    "ModelProvider",
     "OAuthTokenEndpointAuthMethod",
     "PdfDocumentSource",
     "PermissionAction",
@@ -333,6 +337,7 @@ __all__: list[str] = [
     "UserMessage",
     "WorkingState",
     "WorkingStateChanged",
+    "list_models",
     "list_sessions",
     "run",
     # Version

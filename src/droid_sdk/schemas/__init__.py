@@ -172,6 +172,8 @@ from droid_sdk.schemas.client import (
     ListMcpToolsRequestParams,
     ListMcpToolsResponse,
     ListMcpToolsResult,
+    ListModelsRequest,
+    ListModelsResponse,
     ListSkillsRequest,
     ListSkillsRequestParams,
     ListSkillsResponse,
@@ -358,6 +360,12 @@ from droid_sdk.schemas.mission import (
     WorkerSelectedFeatureEntry,
     WorkerStartedEntry,
 )
+from droid_sdk.schemas.models import (
+    ListModelsOptions,
+    ListModelsResult,
+    ModelInfo,
+    ModelMetadata,
+)
 from droid_sdk.schemas.session import (
     LastCallTokenUsage,
     SystemPromptConfig,
@@ -536,6 +544,10 @@ __all__: list[str] = [  # noqa: RUF022
     "ListMcpToolsRequestParams",
     "ListMcpToolsResponse",
     "ListMcpToolsResult",
+    "ListModelsOptions",
+    "ListModelsRequest",
+    "ListModelsResponse",
+    "ListModelsResult",
     "ListSkillsRequest",
     "ListSkillsRequestParams",
     "ListSkillsResponse",
@@ -582,6 +594,8 @@ __all__: list[str] = [  # noqa: RUF022
     "MissionStateChangedNotification",
     "MissionWorkerCompletedNotification",
     "MissionWorkerStartedNotification",
+    "ModelInfo",
+    "ModelMetadata",
     "ModelProvider",
     "OutputFormat",
     "PermissionResolvedNotification",
