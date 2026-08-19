@@ -1,0 +1,36 @@
+src/droid_sdk/_high_level/models.py
+  530e8760d513976c 61,63-66,68-69,71-83,87,116,118,144,150-151,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "e8203402d2512c4de89e65ca08103b55e9ae19ed",
+  "prompts": {
+    "530e8760d513976c": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6a640480-197d-431e-8187-2b08edc5278b",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 30,
+      "total_deletions": 27,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    },
+    "54658a45f4b79fc8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "15fc9e55-9cbc-40eb-ae13-9f0808f5e92c",
+        "model": "auto"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 183,
+      "overriden_lines": 0
+    }
+  }
+}
