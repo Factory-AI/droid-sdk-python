@@ -2,25 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from droid_sdk._high_level._client import (
+    managed_droid_client,
+    resolve_working_directory,
+)
 from droid_sdk._high_level.enums import ModelProvider, ReasoningEffort
 from droid_sdk._high_level.runtime import Runtime
-from droid_sdk.client import DroidClient
-from droid_sdk.errors import (
-    DroidConnectionError,
-    DroidError,
-    InvalidWorkingDirectoryError,
-)
 from droid_sdk.observability import ObservabilityAdapter
-from droid_sdk.transport import ProcessTransport
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
     from droid_sdk.schemas.models import ModelInfo as WireModelInfo
 
@@ -84,27 +79,6 @@ def _model_from_wire(wire_model: WireModelInfo) -> ModelInfo:
     )
 
 
-def _resolve_working_directory(value: str | Path | None) -> Path:
-    path = Path.cwd() if value is None else Path(value)
-    try:
-        if not path.is_dir():
-            raise InvalidWorkingDirectoryError(str(path))
-        return path.resolve()
-    except OSError as exc:
-        raise InvalidWorkingDirectoryError(str(path)) from exc
-
-
-async def _close_quietly(client: DroidClient) -> None:
-    task = asyncio.create_task(client.close())
-    try:
-        await asyncio.shield(task)
-    except asyncio.CancelledError:
-        await task
-        raise
-    except Exception:
-        pass
-
-
 async def list_models(
     *,
     include_disabled: bool = False,
@@ -113,62 +87,24 @@ async def list_models(
     api_key: str | None = None,
 ) -> list[ModelInfo]:
     """List models currently selectable by a one-shot Droid process."""
-    working_directory = _resolve_working_directory(cwd)
     runtime_config = runtime or Runtime()
-    observability_adapter = ObservabilityAdapter(runtime_config.observability)
-
     if runtime_config.transport is not None:
-        if not runtime_config.transport.is_connected:
-            raise DroidError("A supplied transport must already be connected")
-        transport = runtime_config.transport
-    else:
-        key = api_key or os.environ.get("FACTORY_API_KEY")
-        env = dict(runtime_config.env)
-        if key:
-            env["FACTORY_API_KEY"] = key
-        executable = (
-            "droid"
-            if runtime_config.executable is None
-            else str(runtime_config.executable)
-        )
-        transport = ProcessTransport(
-            exec_path=executable,
-            exec_args=[
-                "exec",
-                "--input-format",
-                "stream-jsonrpc",
-                "--output-format",
-                "stream-jsonrpc",
-                *runtime_config.args,
-            ],
-            cwd=str(working_directory),
-            env=env,
-        )
-
-    client = DroidClient(
-        transport=transport,
-        trace_meta_injector=observability_adapter.trace_meta_injector,
-        timing_callback=observability_adapter.timing_callback,
-    )
-    try:
-        try:
-            await client.connect()
-        except FileNotFoundError as exc:
-            raise DroidConnectionError(
-                "Droid executable was not found",
-                exec_path=(
-                    None
-                    if runtime_config.executable is None
-                    else str(runtime_config.executable)
-                ),
-                cwd=str(working_directory),
-            ) from exc
+        if cwd is not None:
+            raise ValueError("cwd cannot be used with a supplied transport")
+        if api_key is not None:
+            raise ValueError("api_key cannot be used with a supplied transport")
+    observability_adapter = ObservabilityAdapter(runtime_config.observability)
+    working_directory = resolve_working_directory(cwd)
+    async with managed_droid_client(
+        runtime_config,
+        api_key=api_key,
+        cwd=working_directory,
+        observability=observability_adapter,
+    ) as client:
         result = await client.list_models(
             include_disabled=True if include_disabled else None
         )
         return [_model_from_wire(model) for model in result.models]
-    finally:
-        await _close_quietly(client)
 
 
 __all__ = ["ModelInfo", "list_models"]

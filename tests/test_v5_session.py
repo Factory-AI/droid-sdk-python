@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pytest
 
+import droid_sdk._high_level._client as client_module
 import droid_sdk._high_level.session as session_module
 from droid_sdk import (
     Document,
@@ -243,7 +244,7 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.hang_interrupt = False
     FakeClient.supports_system_prompt = True
     FakeClient.load_system_prompt = None
-    monkeypatch.setattr(session_module, "DroidClient", FakeClient)
+    monkeypatch.setattr(client_module, "DroidClient", FakeClient)
 
 
 def runtime() -> Runtime:

@@ -295,11 +295,15 @@ class TestAvailableModelConfig:
             supported_reasoning_efforts=[ReasoningEffort.Medium, ReasoningEffort.High],
             default_reasoning_effort=ReasoningEffort.Medium,
             is_custom=False,
+            supports_image_generation=True,
             tier="standard",
             token_multiplier=1.0,
+            kind="chat",
         )
         assert m.id == "claude-sonnet-4"
         assert m.model_provider == ModelProvider.ANTHROPIC
+        assert m.supports_image_generation is True
+        assert m.kind == "chat"
 
     def test_camel_case_roundtrip(self) -> None:
         data = {

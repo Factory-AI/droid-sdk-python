@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib.metadata
-import os
 import uuid
 from enum import Enum
 from pathlib import Path
@@ -16,6 +15,10 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 from pydantic import BaseModel, ValidationError
 from typing_extensions import Self
 
+from droid_sdk._high_level._client import (
+    open_droid_client,
+    resolve_working_directory,
+)
 from droid_sdk._high_level._convert import (
     document_to_wire,
     full_settings_from_wire,
@@ -65,9 +68,6 @@ from droid_sdk._util import (
 )
 from droid_sdk.client import DroidClient
 from droid_sdk.errors import (
-    DroidConnectionError,
-    DroidError,
-    InvalidWorkingDirectoryError,
     SessionBusyError,
     SessionClosedError,
     SessionError,
@@ -84,7 +84,6 @@ from droid_sdk.schemas.enums import (
 from droid_sdk.schemas.enums import (
     DroidInteractionMode,
 )
-from droid_sdk.transport import ProcessTransport
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -302,16 +301,7 @@ class Session(SessionOperationsMixin):
                 self._open_cleanup_task = None
 
     async def _open_impl(self) -> None:
-        if self._requested_cwd is not None:
-            try:
-                if not self._requested_cwd.is_dir():
-                    raise InvalidWorkingDirectoryError(str(self._requested_cwd))
-                requested_cwd = self._requested_cwd.resolve()
-            except OSError as exc:
-                raise InvalidWorkingDirectoryError(str(self._requested_cwd)) from exc
-        else:
-            requested_cwd = Path.cwd()
-
+        requested_cwd = resolve_working_directory(self._requested_cwd)
         client: DroidClient | None = None
         started: list[SdkMcpServer] = []
         session_start_attempted = False
@@ -339,46 +329,12 @@ class Session(SessionOperationsMixin):
 
             runtime = self._runtime_config
             adapter = self._observability
-            if runtime.transport is not None:
-                if not runtime.transport.is_connected:
-                    raise DroidError("A supplied transport must already be connected")
-                transport = runtime.transport
-            else:
-                key = self._api_key or os.environ.get("FACTORY_API_KEY")
-                env = dict(runtime.env)
-                if key:
-                    env["FACTORY_API_KEY"] = key
-                executable = (
-                    "droid" if runtime.executable is None else str(runtime.executable)
-                )
-                transport = ProcessTransport(
-                    exec_path=executable,
-                    exec_args=[
-                        "exec",
-                        "--input-format",
-                        "stream-jsonrpc",
-                        "--output-format",
-                        "stream-jsonrpc",
-                        *runtime.args,
-                    ],
-                    cwd=str(requested_cwd),
-                    env=env,
-                )
-            client = DroidClient(
-                transport=transport,
-                trace_meta_injector=adapter.trace_meta_injector,
-                timing_callback=adapter.timing_callback,
+            client = await open_droid_client(
+                runtime,
+                api_key=self._api_key,
+                cwd=requested_cwd,
+                observability=adapter,
             )
-            try:
-                await client.connect()
-            except FileNotFoundError as exc:
-                raise DroidConnectionError(
-                    "Droid executable was not found",
-                    exec_path=(
-                        None if runtime.executable is None else str(runtime.executable)
-                    ),
-                    cwd=str(requested_cwd),
-                ) from exc
             client.set_permission_handler(self._dispatcher.handle_permission)
             client.set_ask_user_handler(self._dispatcher.handle_question)
 

@@ -218,6 +218,10 @@ The keyword-only arguments are:
 | `runtime` | `Runtime \| None` | Configure the executable, arguments, environment, transport, and observability |
 | `api_key` | `str \| None` | Override `FACTORY_API_KEY` for the one-shot process |
 
+When `runtime.transport` is supplied, that transport already owns its process
+context and authentication. Passing `cwd` or `api_key` at the same time raises
+`ValueError`.
+
 Each immutable `ModelInfo` contains:
 
 | Field | Type |

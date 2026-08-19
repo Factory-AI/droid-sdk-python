@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 import pytest
 from pydantic import ValidationError
 
-import droid_sdk._high_level.models as models_module
+import droid_sdk._high_level._client as client_module
 from droid_sdk import (
     ModelInfo,
     ModelProvider,
@@ -24,6 +24,7 @@ from droid_sdk.low_level import (
     DroidServerMethod,
     ListModelsRequest,
 )
+from droid_sdk.observability import LogEvent, Observability
 from droid_sdk.schemas.models import (
     ListModelsResult,
 )
@@ -116,16 +117,13 @@ async def test_low_level_list_models_is_sessionless(
 
 
 @pytest.mark.asyncio
-async def test_high_level_list_models_returns_immutable_models(
-    tmp_path: Path,
-) -> None:
+async def test_high_level_list_models_returns_immutable_models() -> None:
     transport = InMemoryTransport()
     await transport.connect()
 
     task = asyncio.create_task(
         list_models(
             include_disabled=True,
-            cwd=tmp_path,
             runtime=Runtime(transport=cast("DroidClientTransport", transport)),
         )
     )
@@ -173,14 +171,11 @@ async def test_high_level_list_models_returns_immutable_models(
 
 
 @pytest.mark.asyncio
-async def test_high_level_list_models_closes_transport_when_cancelled(
-    tmp_path: Path,
-) -> None:
+async def test_high_level_list_models_closes_transport_when_cancelled() -> None:
     transport = InMemoryTransport()
     await transport.connect()
     task = asyncio.create_task(
         list_models(
-            cwd=tmp_path,
             runtime=Runtime(transport=cast("DroidClientTransport", transport)),
         )
     )
@@ -191,6 +186,30 @@ async def test_high_level_list_models_closes_transport_when_cancelled(
     with pytest.raises(asyncio.CancelledError):
         await task
     assert transport.is_connected is False
+
+
+@pytest.mark.parametrize(
+    ("cwd", "api_key", "message"),
+    [
+        (".", None, "cwd cannot be used"),
+        (None, "key", "api_key cannot be used"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_list_models_rejects_process_options_with_supplied_transport(
+    cwd: str | None,
+    api_key: str | None,
+    message: str,
+) -> None:
+    transport = InMemoryTransport()
+    await transport.connect()
+    runtime = Runtime(transport=cast("DroidClientTransport", transport))
+
+    with pytest.raises(ValueError, match=message):
+        await list_models(runtime=runtime, cwd=cwd, api_key=api_key)
+
+    assert transport.is_connected is True
+    await transport.close()
 
 
 class FakeProcessTransport:
@@ -230,8 +249,8 @@ async def test_list_models_maps_process_options_and_api_key(
 ) -> None:
     FakeProcessTransport.instances.clear()
     FakeClient.instances.clear()
-    monkeypatch.setattr(models_module, "ProcessTransport", FakeProcessTransport)
-    monkeypatch.setattr(models_module, "DroidClient", FakeClient)
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", FakeClient)
 
     runtime = Runtime(
         executable="/opt/factory/droid",
@@ -264,14 +283,69 @@ class FailingClient(FakeClient):
         raise RuntimeError("catalog failed")
 
 
+class CloseFailingClient(FakeClient):
+    async def close(self) -> None:
+        self.closed = True
+        raise RuntimeError("close failed")
+
+
+class OperationAndCloseFailingClient(CloseFailingClient):
+    async def list_models(
+        self, *, include_disabled: bool | None = None
+    ) -> ListModelsResult:
+        raise RuntimeError("catalog failed")
+
+
+class LogSink:
+    def __init__(self) -> None:
+        self.events: list[LogEvent] = []
+
+    def log(self, event: LogEvent) -> None:
+        self.events.append(event)
+
+
+@pytest.mark.asyncio
+async def test_list_models_surfaces_close_failure_after_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    CloseFailingClient.instances.clear()
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", CloseFailingClient)
+
+    with pytest.raises(RuntimeError, match="close failed"):
+        await list_models(cwd=tmp_path)
+
+    assert CloseFailingClient.instances[0].closed is True
+
+
+@pytest.mark.asyncio
+async def test_list_models_preserves_operation_failure_and_logs_close_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    OperationAndCloseFailingClient.instances.clear()
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", OperationAndCloseFailingClient)
+    logs = LogSink()
+
+    with pytest.raises(RuntimeError, match="catalog failed"):
+        await list_models(
+            cwd=tmp_path,
+            runtime=Runtime(observability=Observability(logger=logs)),
+        )
+
+    assert logs.events[-1].name == "droid.sdk.client.close"
+
+
 @pytest.mark.asyncio
 async def test_list_models_closes_client_after_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     FailingClient.instances.clear()
-    monkeypatch.setattr(models_module, "ProcessTransport", FakeProcessTransport)
-    monkeypatch.setattr(models_module, "DroidClient", FailingClient)
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", FailingClient)
 
     with pytest.raises(RuntimeError, match="catalog failed"):
         await list_models(cwd=tmp_path)
@@ -290,8 +364,8 @@ async def test_list_models_maps_missing_executable_and_invalid_cwd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     MissingExecutableClient.instances.clear()
-    monkeypatch.setattr(models_module, "ProcessTransport", FakeProcessTransport)
-    monkeypatch.setattr(models_module, "DroidClient", MissingExecutableClient)
+    monkeypatch.setattr(client_module, "ProcessTransport", FakeProcessTransport)
+    monkeypatch.setattr(client_module, "DroidClient", MissingExecutableClient)
 
     with pytest.raises(DroidConnectionError, match="Droid executable was not found"):
         await list_models(cwd=tmp_path)
