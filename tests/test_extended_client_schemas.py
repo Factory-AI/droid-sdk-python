@@ -25,6 +25,11 @@ _RESPONSE_ENVELOPE = {
 
 _REQUEST_CASES: list[tuple[str, dict[str, Any], str]] = [
     (
+        "droid.list_models",
+        {"includeDisabled": True},
+        "ListModelsRequest",
+    ),
+    (
         "droid.list_tools",
         {"enabledToolIds": [], "disabledToolIds": ["read-cli"]},
         "ListToolsRequest",
@@ -63,6 +68,21 @@ _REQUEST_CASES: list[tuple[str, dict[str, Any], str]] = [
 ]
 
 _RESPONSE_CASES: list[tuple[str, dict[str, Any]]] = [
+    (
+        "ListModelsResponse",
+        {
+            "models": [
+                {
+                    "id": "model",
+                    "displayName": "Model",
+                    "shortDisplayName": "Model",
+                    "modelProvider": "anthropic",
+                    "supportedReasoningEfforts": ["off"],
+                    "defaultReasoningEffort": "off",
+                }
+            ]
+        },
+    ),
     ("ListToolsResponse", {"tools": []}),
     ("ListCommandsResponse", {"commands": []}),
     ("CloseSessionResponse", {}),

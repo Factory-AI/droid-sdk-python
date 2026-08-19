@@ -9,9 +9,12 @@ from droid_sdk import (
     Document,
     Image,
     McpServerStatus,
+    ModelInfo,
+    ModelProvider,
     Session,
     ToolConfirmationOutcome,
     ToolConfirmationType,
+    list_models,
     list_sessions,
     run,
 )
@@ -21,8 +24,9 @@ from droid_sdk.low_level import DroidClient, DroidClientTransport, ProcessTransp
 def test_v5_entry_points_are_exported() -> None:
     assert droid_sdk.Session is Session
     assert droid_sdk.run is run
+    assert droid_sdk.list_models is list_models
     assert droid_sdk.list_sessions is list_sessions
-    assert {"Session", "run", "list_sessions"} <= set(droid_sdk.__all__)
+    assert {"Session", "run", "list_models", "list_sessions"} <= set(droid_sdk.__all__)
 
 
 def test_root_exports_are_unique_and_present() -> None:
@@ -94,6 +98,8 @@ def test_root_export_snapshot_is_exact() -> None:
         "McpToolInputSchema",
         "Message",
         "Mode",
+        "ModelInfo",
+        "ModelProvider",
         "OAuthTokenEndpointAuthMethod",
         "PdfDocumentSource",
         "PermissionAction",
@@ -183,6 +189,7 @@ def test_root_export_snapshot_is_exact() -> None:
         "UserMessage",
         "WorkingState",
         "WorkingStateChanged",
+        "list_models",
         "list_sessions",
         "run",
         "__version__",
@@ -227,9 +234,24 @@ def test_enum_member_snapshots_are_exact() -> None:
         "FAILED",
         "DISABLED",
     )
+    assert tuple(ModelProvider.__members__) == (
+        "ANTHROPIC",
+        "OPENAI",
+        "GENERIC_CHAT_COMPLETION_API",
+        "FACTORY",
+        "GOOGLE",
+        "XAI",
+        "VOYAGE",
+    )
 
 
 def test_exact_public_signatures_exclude_unsupported_extras() -> None:
+    assert tuple(inspect.signature(list_models).parameters) == (
+        "include_disabled",
+        "cwd",
+        "runtime",
+        "api_key",
+    )
     assert tuple(inspect.signature(list_sessions).parameters) == (
         "cwd",
         "all_workspaces",
@@ -274,3 +296,7 @@ def test_low_level_escape_hatch() -> None:
     assert DroidClient is not None
     assert DroidClientTransport is not None
     assert ProcessTransport is not None
+
+
+def test_model_info_is_public() -> None:
+    assert droid_sdk.ModelInfo is ModelInfo

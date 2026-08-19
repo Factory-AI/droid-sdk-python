@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pytest
 
+import droid_sdk._high_level._client as client_module
 import droid_sdk._high_level.session as session_module
 from droid_sdk import (
     Document,
@@ -77,6 +78,7 @@ class FakeClient:
     close_entered: ClassVar[asyncio.Event | None] = None
     close_gate: ClassVar[asyncio.Event | None] = None
     close_session_error: ClassVar[Exception | None] = None
+    close_error: ClassVar[Exception | None] = None
     fail_send: ClassVar[bool] = False
     hang_interrupt: ClassVar[bool] = False
     supports_system_prompt: ClassVar[bool] = True
@@ -219,6 +221,8 @@ class FakeClient:
             self.close_entered.set()
         if self.close_gate is not None:
             await self.close_gate.wait()
+        if self.close_error is not None:
+            raise self.close_error
 
 
 @pytest.fixture(autouse=True)
@@ -239,11 +243,12 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.close_entered = None
     FakeClient.close_gate = None
     FakeClient.close_session_error = None
+    FakeClient.close_error = None
     FakeClient.fail_send = False
     FakeClient.hang_interrupt = False
     FakeClient.supports_system_prompt = True
     FakeClient.load_system_prompt = None
-    monkeypatch.setattr(session_module, "DroidClient", FakeClient)
+    monkeypatch.setattr(client_module, "DroidClient", FakeClient)
 
 
 def runtime() -> Runtime:
@@ -316,6 +321,32 @@ async def test_session_rejects_droid_without_custom_system_prompt_support() -> N
     client = FakeClient.instances[0]
     assert client.close_session_calls == 1
     assert client.close_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_open_preserves_primary_error_and_logs_cleanup_failures() -> None:
+    sink = ObservabilitySink()
+    FakeClient.supports_system_prompt = False
+    FakeClient.close_session_error = RuntimeError("close session failed")
+    FakeClient.close_error = RuntimeError("close client failed")
+    session = Session(
+        config=SessionConfig(system_prompt="Required behavioral constraint."),
+        runtime=Runtime(
+            transport=cast("DroidClientTransport", FakeTransport()),
+            observability=Observability(logger=sink),
+        ),
+    )
+
+    with pytest.raises(SessionError, match="does not support custom system prompts"):
+        await session.open()
+
+    cleanup_logs = [
+        event for event in sink.logs if event.message.endswith("cleanup failed")
+    ]
+    assert [event.name for event in cleanup_logs] == [
+        "droid.sdk.session.close",
+        "droid.sdk.client.close",
+    ]
 
 
 @pytest.mark.asyncio

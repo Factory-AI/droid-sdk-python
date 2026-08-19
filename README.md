@@ -99,6 +99,29 @@ asyncio.run(main())
 support PNG/JPEG/GIF/WebP images, text documents, and PDFs. Invalid inputs
 raise `InvalidAttachmentError` before a turn starts.
 
+## Discover available models
+
+Use the sessionless model catalog before choosing a model:
+
+```python
+import asyncio
+
+from droid_sdk import list_models
+
+
+async def main() -> None:
+    for model in await list_models():
+        print(model.id, model.default_reasoning_effort)
+
+
+asyncio.run(main())
+```
+
+Disabled models are hidden by default. Pass `include_disabled=True` to include
+them with `disabled_reason`, and pass `cwd=` when project settings should
+participate in discovery. The one-shot Droid process is closed before the
+function returns.
+
 ## Interactions and controls
 
 Attach `InteractionHandlers(on_permission=..., on_question=...)`. Permission

@@ -81,6 +81,7 @@ class DroidServerMethod(str, Enum):
     LIST_SKILLS = "droid.list_skills"
     SET_SKILL_DISABLED = "droid.set_skill_disabled"
     SUBMIT_BUG_REPORT = "droid.submit_bug_report"
+    LIST_MODELS = "droid.list_models"
     LIST_TOOLS = "droid.list_tools"
     LIST_COMMANDS = "droid.list_commands"
     CLOSE_SESSION = "droid.close_session"

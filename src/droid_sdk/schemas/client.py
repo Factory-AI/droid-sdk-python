@@ -39,7 +39,6 @@ from droid_sdk.schemas.enums import (
     McpOAuthTokenEndpointAuthMethod,
     McpServerType,
     MissionState,
-    ModelProvider,
     ReasoningEffort,
     SandboxMode,
     SessionPlatform,
@@ -60,6 +59,7 @@ from droid_sdk.schemas.mission import (  # noqa: TC001
     MissionFeature,
     ProgressLogEntry,
 )
+from droid_sdk.schemas.models import ListModelsOptions, ListModelsResult, ModelMetadata
 from droid_sdk.schemas.session import (
     LastCallTokenUsage,
     SessionTag,
@@ -171,6 +171,8 @@ __all__ = [  # noqa: RUF022
     "ListMcpToolsRequestParams",
     "ListMcpToolsResponse",
     "ListMcpToolsResult",
+    "ListModelsRequest",
+    "ListModelsResponse",
     "ListSkillsRequest",
     "ListSkillsRequestParams",
     "ListSkillsResponse",
@@ -772,7 +774,7 @@ class GitRepoInfo(BaseModel):
     """Repository name."""
 
 
-class AvailableModelConfig(BaseModel):
+class AvailableModelConfig(ModelMetadata):
     """Available model configuration returned in session init/load responses.
 
     Uses ``extra='allow'`` because the available models list is server-driven
@@ -782,46 +784,11 @@ class AvailableModelConfig(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    id: str
-    """Model identifier."""
-
     model_id: str | None = Field(default=None, alias="modelId")
     """Model ID (server-provided, may differ from ``id``)."""
 
-    display_name: str = Field(alias="displayName")
-    """Human-readable display name."""
-
-    short_display_name: str = Field(alias="shortDisplayName")
-    """Short display name."""
-
-    model_provider: ModelProvider = Field(alias="modelProvider")
-    """Model provider."""
-
-    supported_reasoning_efforts: list[ReasoningEffort] = Field(
-        alias="supportedReasoningEfforts"
-    )
-    """List of supported reasoning effort levels."""
-
-    default_reasoning_effort: ReasoningEffort = Field(alias="defaultReasoningEffort")
-    """Default reasoning effort level."""
-
-    is_custom: bool = Field(default=False, alias="isCustom")
-    """Whether this is a custom BYOK model."""
-
-    no_image_support: bool | None = Field(default=None, alias="noImageSupport")
-    """Whether the model lacks image support."""
-
     supports_pdfs: bool | None = Field(default=None, alias="supportsPDFs")
     """Whether the model supports PDF input."""
-
-    tier: str | None = None
-    """Optional model tier (e.g. 'standard', 'premium')."""
-
-    token_multiplier: float | None = Field(default=None, alias="tokenMultiplier")
-    """Optional token billing multiplier."""
-
-    promo_label: str | None = Field(default=None, alias="promoLabel")
-    """Optional promotional label."""
 
     feature_flag: dict[str, Any] | None = Field(default=None, alias="featureFlag")
     """Optional feature flag gating information."""
@@ -1670,6 +1637,14 @@ class SubmitBugReportRequest(JsonRpcRequest):
     """Typed request parameters."""
 
 
+class ListModelsRequest(JsonRpcRequest):
+    """Request to list models without initializing a session."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    method: Literal[DroidServerMethod.LIST_MODELS]
+    params: ListModelsOptions  # type: ignore[assignment]
+
+
 class ListToolsRequest(JsonRpcRequest):
     """Request to list native CLI tools."""
 
@@ -2506,6 +2481,11 @@ class _SubmitBugReportResponseSuccess(JsonRpcResponseSuccess):
     result: SubmitBugReportResult  # type: ignore[assignment]
 
 
+class _ListModelsResponseSuccess(JsonRpcResponseSuccess):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    result: ListModelsResult  # type: ignore[assignment]
+
+
 class _ListToolsResponseSuccess(JsonRpcResponseSuccess):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     result: ListToolsResult  # type: ignore[assignment]
@@ -2583,6 +2563,7 @@ ToggleMcpToolResponse = _ToggleMcpToolResponseSuccess | JsonRpcResponseFailure
 ListSkillsResponse = _ListSkillsResponseSuccess | JsonRpcResponseFailure
 SetSkillDisabledResponse = _SetSkillDisabledResponseSuccess | JsonRpcResponseFailure
 SubmitBugReportResponse = _SubmitBugReportResponseSuccess | JsonRpcResponseFailure
+ListModelsResponse = _ListModelsResponseSuccess | JsonRpcResponseFailure
 ListToolsResponse = _ListToolsResponseSuccess | JsonRpcResponseFailure
 ListCommandsResponse = _ListCommandsResponseSuccess | JsonRpcResponseFailure
 CloseSessionResponse = _CloseSessionResponseSuccess | JsonRpcResponseFailure
@@ -2623,6 +2604,7 @@ ClientRequestUnion = Annotated[
     | ListSkillsRequest
     | SetSkillDisabledRequest
     | SubmitBugReportRequest
+    | ListModelsRequest
     | ListToolsRequest
     | ListCommandsRequest
     | CloseSessionRequest

@@ -77,7 +77,7 @@ class TestConstants:
 
 
 ENUM_MEMBER_COUNTS: list[tuple[type[Enum], int]] = [
-    (DroidServerMethod, 31),
+    (DroidServerMethod, 32),
     (DroidClientMethod, 3),
     (SessionNotificationType, 35),
     (ToolConfirmationOutcome, 15),
@@ -217,6 +217,7 @@ REPRESENTATIVE_VALUES: list[tuple[type[Enum], str, Any]] = [
     (DroidServerMethod, "SUBMIT_MCP_AUTH_CODE", "droid.submit_mcp_auth_code"),
     (DroidServerMethod, "LIST_SKILLS", "droid.list_skills"),
     (DroidServerMethod, "SUBMIT_BUG_REPORT", "droid.submit_bug_report"),
+    (DroidServerMethod, "LIST_MODELS", "droid.list_models"),
     (DroidServerMethod, "LIST_TOOLS", "droid.list_tools"),
     (DroidServerMethod, "LIST_COMMANDS", "droid.list_commands"),
     (DroidServerMethod, "CLOSE_SESSION", "droid.close_session"),

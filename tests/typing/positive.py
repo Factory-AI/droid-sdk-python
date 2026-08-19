@@ -21,6 +21,8 @@ from droid_sdk import (
     JsonSchema,
     McpServerStatusInfo,
     McpStatusChanged,
+    ModelInfo,
+    ModelProvider,
     PermissionAction,
     PermissionHandler,
     PermissionRequest,
@@ -49,6 +51,7 @@ from droid_sdk import (
     ToolInfo,
     ToolResultBlock,
     ToolUseBlock,
+    list_models,
     run,
 )
 from droid_sdk._high_level.output import OutputAdapter, prepare_output_adapter
@@ -109,6 +112,22 @@ SessionConfig(system_prompt="Act as a dependency analyst.")
 settings_update = SessionSettingsUpdate(model="claude-sonnet")
 assert_type(settings_update.model, str | None)
 assert_type(settings_update.reasoning_effort, ReasoningEffort | None)
+
+model_info = ModelInfo(
+    id="model",
+    display_name="Model",
+    short_display_name="Model",
+    model_provider=ModelProvider.ANTHROPIC,
+    supported_reasoning_efforts=(ReasoningEffort.OFF,),
+    default_reasoning_effort=ReasoningEffort.OFF,
+)
+assert_type(model_info.model_provider, ModelProvider)
+assert_type(model_info.supported_reasoning_efforts, Sequence[ReasoningEffort])
+
+
+async def discover_models() -> None:
+    assert_type(await list_models(), list[ModelInfo])
+
 
 tool = ToolInfo(
     id="Read",
