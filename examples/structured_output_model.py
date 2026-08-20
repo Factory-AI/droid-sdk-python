@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from droid_sdk import run
+from droid_sdk import RunSuccess, SessionConfig, run
 
 
 class Finding(BaseModel):
@@ -22,11 +22,29 @@ class Review(BaseModel):
 
 async def main() -> None:
     result = await run(
-        "Return a short repository summary and zero or more findings.",
+        (
+            'Return summary exactly "Structured output works." and one finding '
+            'with severity "low" and message exactly "Example complete."'
+        ),
         output=Review,
-        timeout=180,
+        timeout=60,
+        config=SessionConfig(
+            disable_builtin_skills=True,
+            restrict_tools=(),
+        ),
     )
-    assert result.output is not None, result.output_validation_error
+    assert isinstance(result, RunSuccess), (
+        result.error.message if result.error else result.subtype
+    )
+    assert result.output == Review(
+        summary="Structured output works.",
+        findings=[
+            Finding(
+                severity="low",
+                message="Example complete.",
+            )
+        ],
+    )
     print(result.output.summary)
 
 

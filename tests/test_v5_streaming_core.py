@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from droid_sdk import (
     AssistantMessage,
@@ -780,6 +780,20 @@ class NumericOutput(BaseModel):
     value: float
 
 
+class StrictFinding(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    severity: str
+    message: str
+
+
+class StrictReview(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    summary: str
+    findings: list[StrictFinding]
+
+
 @pytest.mark.asyncio
 async def test_structured_output_raw_adapted_fallback_and_validation_error() -> None:
     valid = RunStream[Review](
@@ -843,6 +857,50 @@ async def test_structured_output_raw_adapted_fallback_and_validation_error() -> 
     raw.feed_notification(_complete())
     await _collect(raw)
     assert raw.result.output == {"summary": "fallback"}
+
+
+@pytest.mark.asyncio
+async def test_strict_nested_output_validates_frozen_stream_data() -> None:
+    stream = RunStream[StrictReview](
+        expected_turn_id="turn",
+        session_id="session",
+        output_adapter=prepare_output_adapter(StrictReview),
+    )
+    raw = {
+        "summary": "ok",
+        "findings": [
+            {
+                "severity": "high",
+                "message": "Validate ordinary JSON containers",
+            }
+        ],
+    }
+    stream.feed_notification(
+        {
+            "type": "structured_output",
+            "messageId": "assistant",
+            "structuredOutput": raw,
+        }
+    )
+    stream.feed_notification(_complete())
+
+    await _collect(stream)
+
+    assert isinstance(stream.result, RunSuccess)
+    assert stream.result.output == StrictReview.model_validate(raw)
+    structured_output = stream.result.structured_output
+    assert structured_output is not None
+    assert structured_output == {
+        "summary": "ok",
+        "findings": (
+            {
+                "severity": "high",
+                "message": "Validate ordinary JSON containers",
+            },
+        ),
+    }
+    assert isinstance(structured_output["findings"], tuple)
+    assert stream.result.output_validation_error is None
 
 
 @pytest.mark.asyncio
