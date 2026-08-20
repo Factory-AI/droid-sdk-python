@@ -1,0 +1,27 @@
+src/droid_sdk/_high_level/output.py
+  8da6799d40b7c2de 50-55,57,59-60
+tests/test_v5_streaming_core.py
+  8da6799d40b7c2de 9,783-796,862-903
+examples/structured_output_model.py
+  8da6799d40b7c2de 10,25-28,30-34,36-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "4a0a113d43b3e2529572456800bc0296b1e709bc",
+  "prompts": {
+    "8da6799d40b7c2de": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e10fe621-9ed6-48c7-8289-114adb1dddc0",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 91,
+      "total_deletions": 9,
+      "accepted_lines": 90,
+      "overriden_lines": 0
+    }
+  }
+}
