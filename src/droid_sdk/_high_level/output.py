@@ -47,11 +47,17 @@ class OutputAdapter(Generic[T_co]):
             return OutputAdaptation(None, None, None)
 
         if self._model is not None:
+            structured_output = _raw_object(raw)
+            validation_input = (
+                thaw_json(structured_output)
+                if structured_output is not None
+                else raw
+            )
             try:
-                value = self._model.model_validate(raw)
+                value = self._model.model_validate(validation_input)
             except ValidationError as exc:
-                return OutputAdaptation(None, _raw_object(raw), exc)
-            return OutputAdaptation(cast("T_co", value), _raw_object(raw), None)
+                return OutputAdaptation(None, structured_output, exc)
+            return OutputAdaptation(cast("T_co", value), structured_output, None)
 
         raw_value = _validate_json_object(raw)
         return OutputAdaptation(
