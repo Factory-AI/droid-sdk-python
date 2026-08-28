@@ -1,0 +1,41 @@
+tests/test_client.py
+  30bf7906a7aa7612 21,33,503-565,634-635,748,854
+tests/test_attribution.py
+  30bf7906a7aa7612 1-115
+src/droid_sdk/_attribution.py
+  30bf7906a7aa7612 1-50
+tests/test_transport.py
+  30bf7906a7aa7612 18,333-371
+tests/test_enums.py
+  30bf7906a7aa7612 17,49,69,77-78,105-106,156,386-388
+tests/test_client_transport_abstraction.py
+  30bf7906a7aa7612 23,367
+src/droid_sdk/schemas/enums.py
+  30bf7906a7aa7612 14,51-52,356-375,478
+tests/test_query.py
+  30bf7906a7aa7612 20,252-271
+src/droid_sdk/transport.py
+  30bf7906a7aa7612 21,143-147
+tests/test_protocol.py
+  30bf7906a7aa7612 34,276-292,464-471,484-510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "4e897bf3c99330ac9784239e0c4bde81ab99090a",
+  "prompts": {
+    "30bf7906a7aa7612": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "762dcd86-ba15-4d29-94f6-2992d41ff778",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 420,
+      "total_deletions": 29,
+      "accepted_lines": 400,
+      "overriden_lines": 0
+    }
+  }
+}
