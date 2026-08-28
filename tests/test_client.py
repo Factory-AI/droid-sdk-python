@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pydantic import ValidationError
 
-from droid_sdk._attribution import SDK_CLIENT_METADATA
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -37,6 +36,7 @@ from droid_sdk.schemas.enums import (
     SettingsLevel,
 )
 from droid_sdk.schemas.messages import DocumentSourceType, PlainTextSource
+from tests.helpers import expected_sdk_metadata
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -529,7 +529,7 @@ class TestInitializeSession:
         assert sdk_tags == [
             {
                 "name": "sdk",
-                "metadata": SDK_CLIENT_METADATA.model_dump(mode="json"),
+                "metadata": expected_sdk_metadata(),
             }
         ]
 

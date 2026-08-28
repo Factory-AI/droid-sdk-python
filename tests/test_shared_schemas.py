@@ -74,7 +74,7 @@ class TestClientRequestAttribution:
         assert attribution.sdk.language == "python"
 
     def test_non_sdk_caller_rejects_sdk_metadata(self) -> None:
-        with pytest.raises(ValidationError, match="SDK callers must provide"):
+        with pytest.raises(ValidationError, match="only valid for SDK callers"):
             ClientRequestAttribution(
                 client=ClientType.CLI,
                 sdk=SdkClientMetadata(language="python", version="0.3.0"),

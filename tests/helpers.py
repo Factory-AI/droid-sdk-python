@@ -8,6 +8,7 @@ arbitrary transport implementations.
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -173,6 +174,38 @@ class InMemoryTransport:
         """
         await asyncio.sleep(0)
         self.inject_message(message)
+
+
+async def wait_for_sent(
+    transport: InMemoryTransport,
+    count: int,
+    *,
+    max_iterations: int = 2_000,
+) -> None:
+    """Wait until the transport has sent at least ``count`` messages."""
+    for _ in range(max_iterations):
+        if len(transport.sent_messages) >= count:
+            return
+        await asyncio.sleep(0)
+    raise TimeoutError(
+        f"Timed out waiting for {count} messages, got {len(transport.sent_messages)}"
+    )
+
+
+def expected_sdk_metadata() -> dict[str, str]:
+    """Return the Python SDK metadata expected on the wire."""
+    return {
+        "language": "python",
+        "version": importlib.metadata.version("droid-sdk"),
+    }
+
+
+def expected_sdk_request_attribution() -> dict[str, object]:
+    """Return the Python SDK request attribution expected on the wire."""
+    return {
+        "client": "sdk",
+        "sdk": expected_sdk_metadata(),
+    }
 
 
 def make_success_response(

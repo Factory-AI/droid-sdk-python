@@ -31,7 +31,6 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 
-from droid_sdk._attribution import SDK_REQUEST_ATTRIBUTION
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -61,6 +60,7 @@ from droid_sdk.schemas.enums import (
     JsonRpcErrorCode,
     ToolConfirmationOutcome,
 )
+from tests.helpers import expected_sdk_request_attribution
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -280,13 +280,7 @@ class TestEnvelopeConstruction:
         task = asyncio.create_task(engine.send_request("droid.list_skills", {}))
         await asyncio.sleep(0.01)
         sent = transport.get_last_sent()
-        assert sent["_meta"]["requestAttribution"] == (
-            SDK_REQUEST_ATTRIBUTION.model_dump(
-                mode="json",
-                by_alias=True,
-                exclude_none=True,
-            )
-        )
+        assert sent["_meta"]["requestAttribution"] == expected_sdk_request_attribution()
         transport.deliver_message(make_success_response(sent["id"]))
         await task
 
@@ -462,11 +456,7 @@ class TestProtocolObservability:
             await asyncio.sleep(0.01)
             sent = transport.get_last_sent()
             assert sent["_meta"] == {
-                "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
-                    mode="json",
-                    by_alias=True,
-                    exclude_none=True,
-                ),
+                "requestAttribution": expected_sdk_request_attribution(),
                 "traceparent": "00-trace-parent",
             }
 
@@ -500,11 +490,7 @@ class TestProtocolObservability:
             await asyncio.sleep(0.01)
             sent = transport.get_last_sent()
             assert sent["_meta"] == {
-                "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
-                    mode="json",
-                    by_alias=True,
-                    exclude_none=True,
-                )
+                "requestAttribution": expected_sdk_request_attribution()
             }
             transport.deliver_message(make_success_response(sent["id"]))
             await task

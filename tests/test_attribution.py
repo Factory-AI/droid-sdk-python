@@ -3,31 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from droid_sdk import Runtime, Session, SessionConfig, SessionTag
-from droid_sdk._attribution import SDK_CLIENT_METADATA, SDK_REQUEST_ATTRIBUTION
-from tests.helpers import InMemoryTransport, make_success_response
+from tests.helpers import (
+    InMemoryTransport,
+    expected_sdk_metadata,
+    expected_sdk_request_attribution,
+    make_success_response,
+    wait_for_sent,
+)
 
 if TYPE_CHECKING:
     from droid_sdk.types import DroidClientTransport
-
-
-async def _wait_for_sent(
-    transport: InMemoryTransport,
-    count: int,
-) -> dict[str, object]:
-    for _ in range(2_000):
-        if len(transport.sent_messages) >= count:
-            return cast(
-                "dict[str, object]",
-                json.loads(transport.sent_messages[count - 1]),
-            )
-        await asyncio.sleep(0)
-    raise AssertionError(f"Timed out waiting for request {count}")
 
 
 async def _respond_to_session_lifecycle(
@@ -35,7 +25,8 @@ async def _respond_to_session_lifecycle(
     *,
     resume: bool,
 ) -> None:
-    start_request = await _wait_for_sent(transport, 1)
+    await wait_for_sent(transport, 1)
+    start_request = transport.get_sent_parsed(0)
     result = {
         "session": {"id": "session-1", "messages": []},
         "settings": {
@@ -48,16 +39,9 @@ async def _respond_to_session_lifecycle(
         result["sessionId"] = "session-1"
     transport.inject_message(make_success_response(str(start_request["id"]), result))
 
-    close_request = await _wait_for_sent(transport, 2)
+    await wait_for_sent(transport, 2)
+    close_request = transport.get_sent_parsed(1)
     transport.inject_message(make_success_response(str(close_request["id"]), {}))
-
-
-def _expected_request_attribution() -> dict[str, object]:
-    return SDK_REQUEST_ATTRIBUTION.model_dump(
-        mode="json",
-        by_alias=True,
-        exclude_none=True,
-    )
 
 
 @pytest.mark.asyncio
@@ -84,16 +68,16 @@ async def test_high_level_create_uses_canonical_sdk_attribution() -> None:
     await session.close()
     await responder
 
-    request = json.loads(transport.sent_messages[0])
+    request = transport.get_sent_parsed(0)
     assert request["params"]["sessionOriginHint"] == "sdk"
     assert request["params"]["tags"] == [
         {"name": "custom"},
         {
             "name": "sdk",
-            "metadata": SDK_CLIENT_METADATA.model_dump(mode="json"),
+            "metadata": expected_sdk_metadata(),
         },
     ]
-    assert request["_meta"]["requestAttribution"] == (_expected_request_attribution())
+    assert request["_meta"]["requestAttribution"] == expected_sdk_request_attribution()
 
 
 @pytest.mark.asyncio
@@ -112,7 +96,7 @@ async def test_high_level_resume_attributes_request_without_creation_tag() -> No
     await session.close()
     await responder
 
-    request = json.loads(transport.sent_messages[0])
+    request = transport.get_sent_parsed(0)
     assert request["params"]["sessionOriginHint"] == "sdk"
     assert "tags" not in request["params"]
-    assert request["_meta"]["requestAttribution"] == (_expected_request_attribution())
+    assert request["_meta"]["requestAttribution"] == expected_sdk_request_attribution()

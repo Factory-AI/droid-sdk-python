@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from droid_sdk._attribution import SDK_IDENTITY
+from droid_sdk import __version__
 from droid_sdk.errors import ConnectionError as DroidConnectionError
 from droid_sdk.errors import ProcessExitError
 from droid_sdk.transport import ProcessTransport
@@ -366,7 +366,7 @@ except:
 
         assert messages[0] == {
             "client": "sdk",
-            "sdk": SDK_IDENTITY,
+            "sdk": f"python/{__version__}",
             "custom": "preserved",
         }
 

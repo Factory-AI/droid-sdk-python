@@ -382,7 +382,8 @@ class DroidClient:
             restrict_tool_ids: Restrict available tools to these IDs.
             session_location: Session metadata location.
             session_source: Session source information.
-            tags: Optional session tags.
+            tags: Optional session tags. The ``sdk`` tag is reserved and any
+                caller value is replaced with the canonical SDK identity.
             auto_reject_permission_requests: Whether to reject permission
                 requests instead of forwarding them.
             disable_builtin_skills: Whether builtin skills are unavailable.
@@ -404,10 +405,7 @@ class DroidClient:
             if session_source is not None
             else None
         )
-        caller_tags = (
-            [] if tags is None else [SessionTag.model_validate(tag) for tag in tags]
-        )
-        validated_tags = canonicalize_sdk_tags(caller_tags)
+        validated_tags = canonicalize_sdk_tags(_validate_session_tags(tags) or [])
         validated_system_prompt = (
             SystemPromptPreset.model_validate(system_prompt)
             if isinstance(system_prompt, dict)
@@ -677,11 +675,7 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
-        )
+        validated_tags = _validate_session_tags(tags)
         params = _serialize_params(
             UpdateSessionSettingsRequestParams(
                 model_id=model_id,
@@ -1458,11 +1452,7 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
-        )
+        validated_tags = _validate_session_tags(tags)
         params = _serialize_params(
             ForkSessionRequestParams(title=title, tags=validated_tags)
         )
@@ -1962,6 +1952,14 @@ def _serialize_params(model: BaseModel) -> dict[str, Any]:
         by_alias=True,
         exclude_none=True,
     )
+
+
+def _validate_session_tags(
+    tags: Sequence[SessionTag | dict[str, Any]] | None,
+) -> list[SessionTag] | None:
+    if tags is None:
+        return None
+    return [SessionTag.model_validate(tag) for tag in tags]
 
 
 def _validate_mcp_servers(

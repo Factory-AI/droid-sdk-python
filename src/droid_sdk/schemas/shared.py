@@ -56,7 +56,7 @@ class ClientRequestAttribution(BaseModel):
         if self.client is ClientType.SDK and self.sdk is None:
             raise ValueError("SDK callers must provide SDK metadata")
         if self.client is not ClientType.SDK and self.sdk is not None:
-            raise ValueError("SDK callers must provide SDK metadata")
+            raise ValueError("SDK metadata is only valid for SDK callers")
         return self
 
 
