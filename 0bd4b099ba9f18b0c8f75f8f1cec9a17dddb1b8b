@@ -1,0 +1,23 @@
+README.md
+  30bf7906a7aa7612 232-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "0bd4b099ba9f18b0c8f75f8f1cec9a17dddb1b8b",
+  "prompts": {
+    "30bf7906a7aa7612": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "762dcd86-ba15-4d29-94f6-2992d41ff778",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 4,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
