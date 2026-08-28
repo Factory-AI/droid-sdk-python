@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from droid_sdk._attribution import SDK_IDENTITY
 from droid_sdk.errors import ConnectionError as DroidConnectionError
 from droid_sdk.errors import ProcessExitError
 from droid_sdk.transport import ProcessTransport
@@ -328,6 +329,46 @@ except:
         await transport.close()
         assert len(messages) >= 1
         assert messages[0]["env_val"] == "hello_world"
+
+    @pytest.mark.asyncio
+    async def test_connect_overrides_spoofed_sdk_attribution(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Producer-owned SDK attribution wins after all caller env merging."""
+        monkeypatch.setenv("FACTORY_UPSTREAM_CLIENT_TYPE", "ambient-spoof")
+        monkeypatch.setenv("FACTORY_UPSTREAM_SDK", "ruby/9.9.9")
+        script = """
+import os, sys, json
+sys.stdout.write(json.dumps({
+    "client": os.environ.get("FACTORY_UPSTREAM_CLIENT_TYPE"),
+    "sdk": os.environ.get("FACTORY_UPSTREAM_SDK"),
+    "custom": os.environ.get("TEST_CUSTOM_VAR"),
+}) + '\\n')
+sys.stdout.flush()
+try:
+    sys.stdin.read()
+except:
+    pass
+"""
+        transport = ProcessTransport(
+            exec_path=sys.executable,
+            exec_args=["-c", script],
+            env={
+                "FACTORY_UPSTREAM_CLIENT_TYPE": "explicit-spoof",
+                "FACTORY_UPSTREAM_SDK": "typescript/0.0.0",
+                "TEST_CUSTOM_VAR": "preserved",
+            },
+        )
+        await transport.connect()
+        messages, _ = await _collect_messages(transport, timeout=0.3)
+        await transport.close()
+
+        assert messages[0] == {
+            "client": "sdk",
+            "sdk": SDK_IDENTITY,
+            "custom": "preserved",
+        }
 
     @pytest.mark.asyncio
     async def test_connect_sets_custom_cwd(self) -> None:

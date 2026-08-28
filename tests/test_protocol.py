@@ -31,6 +31,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 
+from droid_sdk._attribution import SDK_REQUEST_ATTRIBUTION
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -272,6 +273,24 @@ class TestEnvelopeConstruction:
         await task
 
     @pytest.mark.asyncio
+    async def test_envelope_has_sdk_request_attribution(
+        self, engine: ProtocolEngine, transport: MockTransport
+    ) -> None:
+        """Every outbound request carries canonical Python SDK attribution."""
+        task = asyncio.create_task(engine.send_request("droid.list_skills", {}))
+        await asyncio.sleep(0.01)
+        sent = transport.get_last_sent()
+        assert sent["_meta"]["requestAttribution"] == (
+            SDK_REQUEST_ATTRIBUTION.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+        )
+        transport.deliver_message(make_success_response(sent["id"]))
+        await task
+
+    @pytest.mark.asyncio
     async def test_envelope_has_type_request(
         self, engine: ProtocolEngine, transport: MockTransport
     ) -> None:
@@ -442,7 +461,14 @@ class TestProtocolObservability:
             )
             await asyncio.sleep(0.01)
             sent = transport.get_last_sent()
-            assert sent["_meta"] == {"traceparent": "00-trace-parent"}
+            assert sent["_meta"] == {
+                "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
+                    mode="json",
+                    by_alias=True,
+                    exclude_none=True,
+                ),
+                "traceparent": "00-trace-parent",
+            }
 
             transport.deliver_message(make_success_response(sent["id"]))
             await task
@@ -452,6 +478,36 @@ class TestProtocolObservability:
             assert timings[0].outcome == "success"
             assert timings[0].duration_seconds >= 0
             assert not hasattr(timings[0], "params")
+        finally:
+            await traced_engine.close()
+
+    @pytest.mark.asyncio
+    async def test_trace_injector_failure_preserves_request_attribution(
+        self, transport: MockTransport
+    ) -> None:
+        def fail_injection(_carrier: dict[str, str]) -> None:
+            raise RuntimeError("trace unavailable")
+
+        traced_engine = ProtocolEngine(
+            transport=transport,
+            trace_meta_injector=fail_injection,
+        )
+        await traced_engine.start()
+        try:
+            task = asyncio.create_task(
+                traced_engine.send_request("droid.list_skills", {})
+            )
+            await asyncio.sleep(0.01)
+            sent = transport.get_last_sent()
+            assert sent["_meta"] == {
+                "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
+                    mode="json",
+                    by_alias=True,
+                    exclude_none=True,
+                )
+            }
+            transport.deliver_message(make_success_response(sent["id"]))
+            await task
         finally:
             await traced_engine.close()
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import importlib.metadata
 import uuid
 from enum import Enum
 from pathlib import Path
@@ -40,7 +39,6 @@ from droid_sdk._high_level.config import (
     SessionConfig,
     SessionSettings,
     SessionSource,
-    SessionTag,
     freeze_tool_ids,
 )
 from droid_sdk._high_level.enums import (
@@ -366,15 +364,6 @@ class Session(SessionOperationsMixin):
                 cwd_value = load_cwd(load_result, requested_cwd)
                 wire_settings = load_result.settings
             else:
-                sdk_tag = SessionTag(
-                    name="sdk",
-                    metadata={
-                        "language": "python",
-                        "version": importlib.metadata.version("droid-sdk"),
-                    },
-                )
-                tags = tuple(tag for tag in self._config.tags if tag.name != "sdk")
-                tags += (sdk_tag,)
                 session_start_attempted = True
                 initialize_result = await client.initialize_session(
                     machine_id=self._config.machine_id or "default",
@@ -402,7 +391,7 @@ class Session(SessionOperationsMixin):
                     disabled_tool_ids=list_or_none(self._config.disabled_tools),
                     restrict_tool_ids=list_or_none(self._config.restrict_tools),
                     session_source=wire_source(self._config.session_source),
-                    tags=cast("Any", wire_tags(tags)),
+                    tags=cast("Any", wire_tags(self._config.tags)),
                     auto_reject_permission_requests=(
                         self._config.auto_reject_permission_requests
                     ),

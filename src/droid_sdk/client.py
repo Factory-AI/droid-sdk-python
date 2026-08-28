@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from typing_extensions import Self
 
+from droid_sdk._attribution import canonicalize_sdk_tags
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -102,6 +103,7 @@ from droid_sdk.schemas.enums import (
     McpServerType,
     ReasoningEffort,
     SessionNotificationType,
+    SessionOrigin,
     SettingsLevel,
 )
 from droid_sdk.schemas.models import ListModelsOptions, ListModelsResult
@@ -402,10 +404,8 @@ class DroidClient:
             if session_source is not None
             else None
         )
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
+        validated_tags = canonicalize_sdk_tags(
+            [SessionTag.model_validate(tag) for tag in tags] if tags is not None else []
         )
         validated_system_prompt = (
             SystemPromptPreset.model_validate(system_prompt)
@@ -437,6 +437,7 @@ class DroidClient:
                 restrict_tool_ids=restrict_tool_ids,
                 session_location=session_location,
                 session_source=validated_session_source,
+                session_origin_hint=SessionOrigin.Sdk,
                 tags=validated_tags,
                 auto_reject_permission_requests=auto_reject_permission_requests,
                 disable_builtin_skills=disable_builtin_skills,
@@ -514,6 +515,7 @@ class DroidClient:
                 disable_builtin_skills=disable_builtin_skills,
                 session_location=session_location,
                 session_source=validated_session_source,
+                session_origin_hint=SessionOrigin.Sdk,
             )
         )
         response = await protocol.send_request(
@@ -568,6 +570,7 @@ class DroidClient:
                     "images": images,
                     "files": files,
                     "outputFormat": output_format,
+                    "userMessageSource": SessionOrigin.Sdk,
                 }
             )
         )

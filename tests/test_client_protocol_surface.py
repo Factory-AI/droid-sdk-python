@@ -618,6 +618,7 @@ class TestNewRequestFields:
                 "platform": "api",
                 "delegationSessionId": "delegation-1",
             },
+            "sessionOriginHint": "sdk",
         }
 
         await client.close()

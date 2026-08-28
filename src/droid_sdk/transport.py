@@ -18,6 +18,7 @@ import signal
 from collections.abc import AsyncIterator  # noqa: TC003
 from typing import Any
 
+from droid_sdk._attribution import sdk_process_environment
 from droid_sdk._util import consume_task_result
 from droid_sdk.errors import DroidConnectionError, DroidProcessError
 
@@ -139,9 +140,11 @@ class ProcessTransport:
         self._is_closing = False
         self._stderr_capture = ""
 
-        env: dict[str, str] | None = None
-        if self._env is not None:
-            env = {**os.environ, **self._env}
+        env = {
+            **os.environ,
+            **(self._env or {}),
+            **sdk_process_environment(),
+        }
         self._stderr_redaction_values = self._collect_redaction_values(env)
 
         try:

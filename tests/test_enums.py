@@ -14,6 +14,7 @@ from droid_sdk.schemas.constants import (
     FACTORY_CLIENT_HEADER,
     FACTORY_CLIENT_VERSION,
     FACTORY_PROTOCOL_VERSION,
+    FACTORY_SDK_HEADER,
     JSONRPC_VERSION,
     LEGACY_FACTORY_API_VERSION,
 )
@@ -45,6 +46,7 @@ from droid_sdk.schemas.enums import (
     ProgressLogEntryType,
     ReasoningEffort,
     SessionNotificationType,
+    SessionOrigin,
     SettingsLevel,
     SkillLocation,
     ToolConfirmationOutcome,
@@ -64,13 +66,16 @@ class TestConstants:
         assert LEGACY_FACTORY_API_VERSION == "1.0.0"
 
     def test_factory_protocol_version(self) -> None:
-        assert FACTORY_PROTOCOL_VERSION == "1.1.0"
+        assert FACTORY_PROTOCOL_VERSION == "1.192.0"
 
     def test_factory_client_header(self) -> None:
         assert FACTORY_CLIENT_HEADER == "X-Factory-Client"
 
     def test_factory_client_version(self) -> None:
         assert FACTORY_CLIENT_VERSION == "X-Client-Version"
+
+    def test_factory_sdk_header(self) -> None:
+        assert FACTORY_SDK_HEADER == "X-Factory-Sdk"
 
 
 # --- Enum Member Count Tests ---
@@ -97,7 +102,8 @@ ENUM_MEMBER_COUNTS: list[tuple[type[Enum], int]] = [
     (ProgressLogEntryType, 11),
     (JsonRpcErrorCode, 8),
     (JsonRpcMessageType, 3),
-    (ClientType, 6),
+    (ClientType, 7),
+    (SessionOrigin, 17),
     (DroidMode, 4),
     (DroidSubMode, 2),
     (DroidInteractionMode, 3),
@@ -147,6 +153,7 @@ STRING_ENUMS: list[type[Enum]] = [
     ProgressLogEntryType,
     JsonRpcMessageType,
     ClientType,
+    SessionOrigin,
     DroidMode,
     DroidSubMode,
     DroidInteractionMode,
@@ -376,6 +383,9 @@ REPRESENTATIVE_VALUES: list[tuple[type[Enum], str, Any]] = [
     (ClientType, "Daemon", "daemon"),
     (ClientType, "CLI", "cli"),
     (ClientType, "Backend", "backend"),
+    (ClientType, "SDK", "sdk"),
+    # SessionOrigin
+    (SessionOrigin, "Sdk", "sdk"),
     # DroidMode
     (DroidMode, "TerminalUI", "terminal-ui"),
     (DroidMode, "NonInteractiveCLI", "non-interactive-cli"),

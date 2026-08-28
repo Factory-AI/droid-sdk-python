@@ -17,6 +17,7 @@ from unittest.mock import patch
 import pytest
 
 import droid_sdk.query  # noqa: F401 — ensure module is loaded
+from droid_sdk._attribution import SDK_CLIENT_METADATA, SDK_REQUEST_ATTRIBUTION
 from droid_sdk.schemas.enums import (
     AutonomyLevel,
     DroidInteractionMode,
@@ -248,6 +249,26 @@ class TestQueryLifecycle:
         assert isinstance(messages[-1], TurnComplete)
         # Transport should be closed after iteration
         assert not transport.is_connected
+        init_request, message_request = [
+            json.loads(message) for message in transport.sent_messages[:2]
+        ]
+        assert init_request["params"]["sessionOriginHint"] == "sdk"
+        assert init_request["params"]["tags"] == [
+            {
+                "name": "sdk",
+                "metadata": SDK_CLIENT_METADATA.model_dump(mode="json"),
+            }
+        ]
+        assert message_request["params"]["userMessageSource"] == "sdk"
+        expected_attribution = SDK_REQUEST_ATTRIBUTION.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        )
+        assert all(
+            request["_meta"]["requestAttribution"] == expected_attribution
+            for request in (init_request, message_request)
+        )
 
     @pytest.mark.asyncio
     async def test_query_default_exec_path(self) -> None:

@@ -20,6 +20,7 @@ import pytest
 
 from droid_sdk.client import DroidClient
 from droid_sdk.errors import DroidClientError
+from droid_sdk.schemas.constants import FACTORY_PROTOCOL_VERSION
 from droid_sdk.schemas.enums import (
     DroidClientMethod,
     DroidServerMethod,
@@ -363,7 +364,7 @@ class TestSentMessagesAreValidJson:
         assert parsed["jsonrpc"] == "2.0"
         assert "factoryApiVersion" in parsed
         assert "factoryProtocolVersion" in parsed
-        assert parsed["factoryProtocolVersion"] == "1.1.0"
+        assert parsed["factoryProtocolVersion"] == FACTORY_PROTOCOL_VERSION
 
         # Respond and close
         transport.inject_message(

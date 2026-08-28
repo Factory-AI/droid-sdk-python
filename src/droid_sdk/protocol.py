@@ -28,6 +28,7 @@ from typing import Any, Final, cast
 
 from pydantic import BaseModel
 
+from droid_sdk._attribution import SDK_REQUEST_ATTRIBUTION
 from droid_sdk.errors import (
     DroidConnectionError,
     DroidError,
@@ -231,6 +232,13 @@ class ProtocolEngine:
             "method": method,
             "params": params,
         }
+        meta: dict[str, Any] = {
+            "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+        }
         if self._trace_meta_injector is not None:
             carrier: dict[str, str] = {}
             try:
@@ -246,8 +254,8 @@ class ProtocolEngine:
                     for key, value in carrier.items()
                     if key in {"traceparent", "tracestate"}
                 }
-                if safe_meta:
-                    envelope["_meta"] = safe_meta
+                meta.update(safe_meta)
+        envelope["_meta"] = meta
 
         # Create future
         loop = asyncio.get_running_loop()
