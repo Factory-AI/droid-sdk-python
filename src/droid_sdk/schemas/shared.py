@@ -1,7 +1,7 @@
 """JSON-RPC 2.0 base Pydantic models for the Factory Droid protocol.
 
 Ported from TypeScript source:
-- packages/common/src/shared/schemas.ts
+- packages/droid-sdk-core/src/protocol/shared/schemas.ts
 """
 
 from __future__ import annotations
