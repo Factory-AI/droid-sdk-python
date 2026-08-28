@@ -229,10 +229,8 @@ Use `all_workspaces=True`, `cwd=`, or `limit=`.
 
 Runnable examples are under `examples/`; offline examples require no
 credentials, while model examples use bounded prompts and finite timeouts.
-The complete command matrix is in
-[`docs/python-sdk-reference.md`](docs/python-sdk-reference.md#runnable-examples).
-See the complete contract in
-[`docs/python-sdk-reference.md`](docs/python-sdk-reference.md).
+See the complete command matrix and API contract in the
+[Python SDK documentation](https://docs.factory.ai/sdk/python).
 
 ## Limitations
 
