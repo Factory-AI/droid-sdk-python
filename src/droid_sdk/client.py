@@ -404,9 +404,10 @@ class DroidClient:
             if session_source is not None
             else None
         )
-        validated_tags = canonicalize_sdk_tags(
-            [SessionTag.model_validate(tag) for tag in tags] if tags is not None else []
+        caller_tags = (
+            [] if tags is None else [SessionTag.model_validate(tag) for tag in tags]
         )
+        validated_tags = canonicalize_sdk_tags(caller_tags)
         validated_system_prompt = (
             SystemPromptPreset.model_validate(system_prompt)
             if isinstance(system_prompt, dict)

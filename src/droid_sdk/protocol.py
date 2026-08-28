@@ -28,7 +28,7 @@ from typing import Any, Final, cast
 
 from pydantic import BaseModel
 
-from droid_sdk._attribution import SDK_REQUEST_ATTRIBUTION
+from droid_sdk._attribution import SDK_REQUEST_ATTRIBUTION_PAYLOAD
 from droid_sdk.errors import (
     DroidConnectionError,
     DroidError,
@@ -233,11 +233,7 @@ class ProtocolEngine:
             "params": params,
         }
         meta: dict[str, Any] = {
-            "requestAttribution": SDK_REQUEST_ATTRIBUTION.model_dump(
-                mode="json",
-                by_alias=True,
-                exclude_none=True,
-            )
+            "requestAttribution": SDK_REQUEST_ATTRIBUTION_PAYLOAD,
         }
         if self._trace_meta_injector is not None:
             carrier: dict[str, str] = {}

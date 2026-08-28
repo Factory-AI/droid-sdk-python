@@ -22,7 +22,10 @@ async def _wait_for_sent(
 ) -> dict[str, object]:
     for _ in range(2_000):
         if len(transport.sent_messages) >= count:
-            return json.loads(transport.sent_messages[count - 1])  # type: ignore[no-any-return]
+            return cast(
+                "dict[str, object]",
+                json.loads(transport.sent_messages[count - 1]),
+            )
         await asyncio.sleep(0)
     raise AssertionError(f"Timed out waiting for request {count}")
 

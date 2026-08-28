@@ -53,8 +53,9 @@ class ClientRequestAttribution(BaseModel):
 
     @model_validator(mode="after")
     def validate_sdk_metadata(self) -> Self:
-        has_sdk_metadata = self.sdk is not None
-        if (self.client is ClientType.SDK) != has_sdk_metadata:
+        if self.client is ClientType.SDK and self.sdk is None:
+            raise ValueError("SDK callers must provide SDK metadata")
+        if self.client is not ClientType.SDK and self.sdk is not None:
             raise ValueError("SDK callers must provide SDK metadata")
         return self
 
