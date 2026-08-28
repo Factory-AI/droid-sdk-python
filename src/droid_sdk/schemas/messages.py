@@ -16,6 +16,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from droid_sdk.schemas.enums import SessionOrigin  # noqa: TC001
+
 __all__ = [
     "Base64ImageSource",
     "Base64PDFSource",
@@ -342,7 +344,10 @@ class FactoryDroidMessage(BaseModel):
     is_error: bool | None = Field(default=None, alias="isError")
     """Whether this message represents an error."""
 
-    user_message_source: str | None = Field(default=None, alias="userMessageSource")
+    user_message_source: SessionOrigin | None = Field(
+        default=None,
+        alias="userMessageSource",
+    )
     interaction_mode: str | None = Field(default=None, alias="interactionMode")
     model_id: str | None = Field(default=None, alias="modelId")
     router_id: str | None = Field(default=None, alias="routerId")
