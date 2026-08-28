@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from typing_extensions import Self
 
+from droid_sdk._attribution import canonicalize_sdk_tags
 from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
@@ -102,6 +103,7 @@ from droid_sdk.schemas.enums import (
     McpServerType,
     ReasoningEffort,
     SessionNotificationType,
+    SessionOrigin,
     SettingsLevel,
 )
 from droid_sdk.schemas.models import ListModelsOptions, ListModelsResult
@@ -380,7 +382,8 @@ class DroidClient:
             restrict_tool_ids: Restrict available tools to these IDs.
             session_location: Session metadata location.
             session_source: Session source information.
-            tags: Optional session tags.
+            tags: Optional session tags. The ``sdk`` tag is reserved and any
+                caller value is replaced with the canonical SDK identity.
             auto_reject_permission_requests: Whether to reject permission
                 requests instead of forwarding them.
             disable_builtin_skills: Whether builtin skills are unavailable.
@@ -402,11 +405,7 @@ class DroidClient:
             if session_source is not None
             else None
         )
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
-        )
+        validated_tags = canonicalize_sdk_tags(_validate_session_tags(tags) or [])
         validated_system_prompt = (
             SystemPromptPreset.model_validate(system_prompt)
             if isinstance(system_prompt, dict)
@@ -437,6 +436,7 @@ class DroidClient:
                 restrict_tool_ids=restrict_tool_ids,
                 session_location=session_location,
                 session_source=validated_session_source,
+                session_origin_hint=SessionOrigin.Sdk,
                 tags=validated_tags,
                 auto_reject_permission_requests=auto_reject_permission_requests,
                 disable_builtin_skills=disable_builtin_skills,
@@ -514,6 +514,7 @@ class DroidClient:
                 disable_builtin_skills=disable_builtin_skills,
                 session_location=session_location,
                 session_source=validated_session_source,
+                session_origin_hint=SessionOrigin.Sdk,
             )
         )
         response = await protocol.send_request(
@@ -568,6 +569,7 @@ class DroidClient:
                     "images": images,
                     "files": files,
                     "outputFormat": output_format,
+                    "userMessageSource": SessionOrigin.Sdk,
                 }
             )
         )
@@ -673,11 +675,7 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
-        )
+        validated_tags = _validate_session_tags(tags)
         params = _serialize_params(
             UpdateSessionSettingsRequestParams(
                 model_id=model_id,
@@ -1454,11 +1452,7 @@ class DroidClient:
         self._ensure_session()
         protocol = self._ensure_protocol()
 
-        validated_tags = (
-            [SessionTag.model_validate(tag) for tag in tags]
-            if tags is not None
-            else None
-        )
+        validated_tags = _validate_session_tags(tags)
         params = _serialize_params(
             ForkSessionRequestParams(title=title, tags=validated_tags)
         )
@@ -1958,6 +1952,14 @@ def _serialize_params(model: BaseModel) -> dict[str, Any]:
         by_alias=True,
         exclude_none=True,
     )
+
+
+def _validate_session_tags(
+    tags: Sequence[SessionTag | dict[str, Any]] | None,
+) -> list[SessionTag] | None:
+    if tags is None:
+        return None
+    return [SessionTag.model_validate(tag) for tag in tags]
 
 
 def _validate_mcp_servers(

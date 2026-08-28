@@ -11,20 +11,75 @@ from droid_sdk.schemas.constants import (
     JSONRPC_VERSION,
     LEGACY_FACTORY_API_VERSION,
 )
-from droid_sdk.schemas.enums import JsonRpcErrorCode
+from droid_sdk.schemas.enums import ClientType, JsonRpcErrorCode
 from droid_sdk.schemas.shared import (
     BaseNotification,
     BaseRequest,
     BaseResponseFailure,
     BaseResponseSuccess,
+    ClientRequestAttribution,
     JsonRpcEnvelope,
     JsonRpcError,
     JsonRpcNotification,
     JsonRpcRequest,
     JsonRpcResponseFailure,
     JsonRpcResponseSuccess,
+    SdkClientMetadata,
     TraceContextMeta,
 )
+
+
+class TestSdkClientMetadata:
+    """Tests for the bounded cross-repository SDK identity contract."""
+
+    @pytest.mark.parametrize("language", ["typescript", "python"])
+    @pytest.mark.parametrize("version", ["0.3.0", "1.0.0-beta.1+build"])
+    def test_accepts_supported_metadata(self, language: str, version: str) -> None:
+        metadata = SdkClientMetadata.model_validate(
+            {"language": language, "version": version}
+        )
+        assert metadata.language == language
+        assert metadata.version == version
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"language": "ruby", "version": "1.0.0"},
+            {"language": "python", "version": ""},
+            {"language": "python", "version": "v" * 65},
+            {"language": "python", "version": "1.0.0/invalid"},
+            {"language": "python", "version": "1.0.0", "extra": "invalid"},
+        ],
+    )
+    def test_rejects_malformed_or_unbounded_metadata(
+        self, metadata: dict[str, str]
+    ) -> None:
+        with pytest.raises(ValidationError):
+            SdkClientMetadata.model_validate(metadata)
+
+
+class TestClientRequestAttribution:
+    """Tests for request attribution's SDK metadata invariant."""
+
+    def test_sdk_caller_requires_sdk_metadata(self) -> None:
+        with pytest.raises(ValidationError, match="SDK callers must provide"):
+            ClientRequestAttribution(client=ClientType.SDK)
+
+    def test_sdk_caller_accepts_bounded_sdk_metadata(self) -> None:
+        attribution = ClientRequestAttribution(
+            client=ClientType.SDK,
+            sdk=SdkClientMetadata(language="python", version="0.3.0"),
+        )
+        assert attribution.sdk is not None
+        assert attribution.sdk.language == "python"
+
+    def test_non_sdk_caller_rejects_sdk_metadata(self) -> None:
+        with pytest.raises(ValidationError, match="only valid for SDK callers"):
+            ClientRequestAttribution(
+                client=ClientType.CLI,
+                sdk=SdkClientMetadata(language="python", version="0.3.0"),
+            )
+
 
 # --- TraceContextMeta Tests ---
 
@@ -49,6 +104,22 @@ class TestTraceContextMeta:
         meta = TraceContextMeta()
         assert meta.traceparent is None
         assert meta.tracestate is None
+        assert meta.request_attribution is None
+
+    def test_request_attribution_serializes_with_wire_alias(self) -> None:
+        meta = TraceContextMeta(
+            request_attribution=ClientRequestAttribution(
+                client=ClientType.SDK,
+                sdk=SdkClientMetadata(language="python", version="0.3.0"),
+            )
+        )
+
+        assert meta.model_dump(mode="json", by_alias=True, exclude_none=True) == {
+            "requestAttribution": {
+                "client": "sdk",
+                "sdk": {"language": "python", "version": "0.3.0"},
+            }
+        }
 
     def test_json_roundtrip(self) -> None:
         """JSON roundtrip preserves data."""

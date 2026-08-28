@@ -41,6 +41,7 @@ from droid_sdk.schemas.enums import (
     MissionState,
     ReasoningEffort,
     SandboxMode,
+    SessionOrigin,
     SessionPlatform,
     SettingsLevel,
     SkillLocation,
@@ -964,6 +965,12 @@ class InitializeSessionRequestParams(BaseModel):
     session_source: SessionSource | None = Field(default=None, alias="sessionSource")
     """Session source information."""
 
+    session_origin_hint: SessionOrigin | None = Field(
+        default=None,
+        alias="sessionOriginHint",
+    )
+    """Runtime surface creating the session."""
+
     tags: list[SessionTag] | None = None
     """Optional session tags."""
 
@@ -1004,6 +1011,10 @@ class LoadSessionRequestParams(BaseModel):
     )
     session_location: str | None = Field(default=None, alias="sessionLocation")
     session_source: SessionSource | None = Field(default=None, alias="sessionSource")
+    session_origin_hint: SessionOrigin | None = Field(
+        default=None,
+        alias="sessionOriginHint",
+    )
 
 
 class AddUserMessageRequestParams(BaseModel):
@@ -1025,6 +1036,12 @@ class AddUserMessageRequestParams(BaseModel):
 
     output_format: OutputFormat | None = Field(default=None, alias="outputFormat")
     """Optional structured-output (JSON Schema) contract for the reply."""
+
+    user_message_source: SessionOrigin | None = Field(
+        default=None,
+        alias="userMessageSource",
+    )
+    """Runtime surface that submitted the user message."""
 
 
 class InterruptSessionRequestParams(BaseModel):

@@ -8,8 +8,6 @@ subprocess via JSON-RPC 2.0 over JSONL (newline-delimited JSON).
 
 from __future__ import annotations
 
-import importlib.metadata
-
 from droid_sdk._high_level._immutable import (
     FrozenJsonObject,
     FrozenJsonValue,
@@ -163,6 +161,7 @@ from droid_sdk._high_level.models import ModelInfo, list_models
 from droid_sdk._high_level.runtime import Runtime, Transport
 from droid_sdk._high_level.session import Session, run
 from droid_sdk._high_level.streaming import RunStream
+from droid_sdk._version import PACKAGE_VERSION
 from droid_sdk.errors import (
     DroidConnectionError,
     DroidError,
@@ -180,7 +179,7 @@ from droid_sdk.errors import (
     StreamIncompleteError,
 )
 
-__version__: str = importlib.metadata.version("droid-sdk")
+__version__: str = PACKAGE_VERSION
 
 __all__: list[str] = [
     "MAX_ATTACHMENT_BYTES",

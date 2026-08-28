@@ -145,6 +145,22 @@ Use `list_tools()`, `list_skills()`, MCP operations, `context()`,
 `enter_spec()`/`leave_spec()`, `rename()`, and raw filtered
 `on_notification()` subscriptions for ongoing sessions.
 
+## SDK attribution
+
+The SDK owns its producer attribution. It sets spawned Droid processes to
+`sdk` and `python/<installed droid-sdk version>`, attaches that identity to
+every JSON-RPC request, and marks new root sessions and user messages with the
+SDK origin.
+
+New root sessions receive exactly one canonical `sdk` tag. Caller-provided
+tags with that name are replaced, while other tags retain their order. Resuming
+a session does not rewrite its stored creation tags. `Runtime.env` cannot
+override these SDK-owned fields.
+
+Low-level integrations can import `FACTORY_SDK_HEADER`, `ClientType`,
+`SessionOrigin`, `SdkClientMetadata`, and `ClientRequestAttribution` from
+`droid_sdk.schemas`.
+
 ## Custom system prompts
 
 Configure a system prompt when creating a session. A string replaces Droid's

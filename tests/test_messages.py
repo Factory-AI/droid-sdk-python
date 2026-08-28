@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from pydantic import ValidationError
+
+from droid_sdk.schemas.enums import SessionOrigin
 from droid_sdk.schemas.messages import (
     DocumentBlock,
     DocumentSourceType,
@@ -244,6 +248,7 @@ class TestFactoryDroidMessage:
                 "chatCompletionReasoningContent": "content",
                 "isUserVisible": True,
                 "isError": False,
+                "userMessageSource": "sdk",
             }
         )
         assert msg.parent_id == "p-1"
@@ -258,6 +263,20 @@ class TestFactoryDroidMessage:
         assert msg.chat_completion_reasoning_content == "content"
         assert msg.is_user_visible is True
         assert msg.is_error is False
+        assert msg.user_message_source is SessionOrigin.Sdk
+
+    def test_rejects_unknown_user_message_source(self) -> None:
+        with pytest.raises(ValidationError):
+            FactoryDroidMessage.model_validate(
+                {
+                    "id": "msg-invalid-source",
+                    "role": "user",
+                    "content": [],
+                    "createdAt": 0,
+                    "updatedAt": 0,
+                    "userMessageSource": "unknown-surface",
+                }
+            )
 
     def test_optional_fields_default_to_none(self) -> None:
         msg = FactoryDroidMessage.model_validate(

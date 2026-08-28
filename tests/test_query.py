@@ -28,7 +28,14 @@ from droid_sdk.stream import (
     StreamMessage,
     TurnComplete,
 )
-from tests.helpers import InMemoryTransport, make_notification, make_success_response
+from tests.helpers import (
+    InMemoryTransport,
+    expected_sdk_metadata,
+    expected_sdk_request_attribution,
+    make_notification,
+    make_success_response,
+    wait_for_sent,
+)
 
 # The __init__.py exports a function named 'query' which shadows the module.
 # Use sys.modules to get the actual module object for patch.object().
@@ -96,33 +103,18 @@ async def _yield_to_loop(n: int = _SUBSCRIBE_DELAY_YIELDS) -> None:
         await asyncio.sleep(0)
 
 
-async def _wait_for_sent(
-    transport: InMemoryTransport,
-    count: int,
-    *,
-    max_iters: int = 2000,
-) -> None:
-    """Wait until ``transport.sent_messages`` has at least *count* entries."""
-    for _ in range(max_iters):
-        if len(transport.sent_messages) >= count:
-            return
-        await asyncio.sleep(0)
-    msg = f"Timed out waiting for {count} messages, got {len(transport.sent_messages)}"
-    raise TimeoutError(msg)
-
-
 async def _respond_to_init_and_message(transport: InMemoryTransport) -> None:
     """Respond to the initialize_session and add_user_message requests.
 
     After responding, yields control multiple times so the ``query()``
     generator can enter ``receive_response()`` and subscribe its listener.
     """
-    await _wait_for_sent(transport, 1)
+    await wait_for_sent(transport, 1)
     init_req = json.loads(transport.sent_messages[0])
     transport.inject_message(_make_init_response(init_req["id"]))
     await asyncio.sleep(0)
 
-    await _wait_for_sent(transport, 2)
+    await wait_for_sent(transport, 2)
     msg_req = json.loads(transport.sent_messages[1])
     transport.inject_message(_make_add_user_message_response(msg_req["id"]))
 
@@ -248,6 +240,22 @@ class TestQueryLifecycle:
         assert isinstance(messages[-1], TurnComplete)
         # Transport should be closed after iteration
         assert not transport.is_connected
+        init_request, message_request = [
+            json.loads(message) for message in transport.sent_messages[:2]
+        ]
+        assert init_request["params"]["sessionOriginHint"] == "sdk"
+        assert init_request["params"]["tags"] == [
+            {
+                "name": "sdk",
+                "metadata": expected_sdk_metadata(),
+            }
+        ]
+        assert message_request["params"]["userMessageSource"] == "sdk"
+        expected_attribution = expected_sdk_request_attribution()
+        assert all(
+            request["_meta"]["requestAttribution"] == expected_attribution
+            for request in (init_request, message_request)
+        )
 
     @pytest.mark.asyncio
     async def test_query_default_exec_path(self) -> None:

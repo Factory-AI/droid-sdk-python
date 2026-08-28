@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-__all__ = [  # noqa: RUF022
+__all__ = [
     "AgentTurnCompletionReason",
     "AutonomyLevel",
     # AutonomyMode intentionally excluded — deprecated in favor of
@@ -47,8 +47,9 @@ __all__ = [  # noqa: RUF022
     "SandboxOperationType",
     "SandboxViolationReason",
     "SandboxViolationType",
-    "SessionPlatform",
     "SessionNotificationType",
+    "SessionOrigin",
+    "SessionPlatform",
     "SettingsLevel",
     "SkillLocation",
     "ToolConfirmationOutcome",
@@ -352,6 +353,28 @@ class SessionPlatform(str, Enum):
     Unknown = "unknown"
 
 
+class SessionOrigin(str, Enum):
+    """Runtime surface that created or currently drives a session."""
+
+    Web = "web"
+    Desktop = "desktop"
+    CliTui = "cli_tui"
+    CliExec = "cli_exec"
+    CliAcp = "cli_acp"
+    Slack = "slack"
+    Jira = "jira"
+    Linear = "linear"
+    MicrosoftTeams = "microsoft-teams"
+    SessionsApi = "sessions_api"
+    Api = "api"
+    Sdk = "sdk"
+    Automation = "automation"
+    ReadinessRemediation = "readiness-remediation"
+    ReadinessEvaluation = "readiness-evaluation"
+    WikiGeneration = "wiki-generation"
+    WikiCISetup = "wiki-ci-setup"
+
+
 class DecompSessionType(str, Enum):
     """Session type for mission decomposition (orchestrator manages workers)."""
 
@@ -452,6 +475,7 @@ class ClientType(str, Enum):
     Daemon = "daemon"
     CLI = "cli"
     Backend = "backend"
+    SDK = "sdk"
 
 
 class DroidMode(str, Enum):

@@ -29,12 +29,14 @@ from droid_sdk.errors import (
 )
 from droid_sdk.protocol import SESSION_INIT_TIMEOUT
 from droid_sdk.schemas.client import Base64ImageSource
+from droid_sdk.schemas.constants import FACTORY_PROTOCOL_VERSION
 from droid_sdk.schemas.enums import (
     DroidServerMethod,
     JsonRpcErrorCode,
     SettingsLevel,
 )
 from droid_sdk.schemas.messages import DocumentSourceType, PlainTextSource
+from tests.helpers import expected_sdk_metadata
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -498,6 +500,70 @@ class TestInitializeSession:
         await task
 
     @pytest.mark.asyncio
+    async def test_canonicalizes_sdk_creation_tag_and_origin(self) -> None:
+        """Caller SDK tags are replaced by one producer-owned Python tag."""
+        client, transport = await create_connected_client()
+        task = asyncio.create_task(
+            client.initialize_session(
+                machine_id="my-machine",
+                cwd="/home/user/project",
+                tags=[
+                    {"name": "custom", "metadata": {"kept": "true"}},
+                    {
+                        "name": "sdk",
+                        "metadata": {"language": "typescript", "version": "spoofed"},
+                    },
+                    {"name": "sdk"},
+                ],
+            )
+        )
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        sdk_tags = [tag for tag in sent["params"]["tags"] if tag["name"] == "sdk"]
+        assert sent["params"]["sessionOriginHint"] == "sdk"
+        assert sent["params"]["tags"][0] == {
+            "name": "custom",
+            "metadata": {"kept": "true"},
+        }
+        assert sdk_tags == [
+            {
+                "name": "sdk",
+                "metadata": expected_sdk_metadata(),
+            }
+        ]
+
+        transport.inject_message(make_success_response(sent["id"], INIT_SESSION_RESULT))
+        await task
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("peer_version", ["1.58.0", None])
+    async def test_attributes_request_and_accepts_older_or_absent_peer_version(
+        self,
+        peer_version: str | None,
+    ) -> None:
+        client, transport = await create_connected_client()
+        task = asyncio.create_task(
+            client.initialize_session(machine_id="test-machine", cwd="/tmp")
+        )
+        await asyncio.sleep(0.01)
+
+        sent = transport.get_last_sent_parsed()
+        assert sent["factoryProtocolVersion"] == FACTORY_PROTOCOL_VERSION
+        assert sent["_meta"]["requestAttribution"]["client"] == "sdk"
+        assert sent["params"]["sessionOriginHint"] == "sdk"
+
+        response = make_success_response(sent["id"], INIT_SESSION_RESULT)
+        if peer_version is None:
+            response.pop("factoryProtocolVersion")
+        else:
+            response["factoryProtocolVersion"] = peer_version
+        transport.inject_message(response)
+
+        result = await task
+        assert result.session_id == "sess-123"
+
+    @pytest.mark.asyncio
     async def test_returns_typed_result(self) -> None:
         """initialize_session returns InitializeSessionResult."""
         client, transport = await create_connected_client()
@@ -565,6 +631,8 @@ class TestLoadSession:
         sent = transport.get_last_sent_parsed()
         assert sent["method"] == DroidServerMethod.LOAD_SESSION.value
         assert sent["params"]["sessionId"] == "sess-abc"
+        assert sent["params"]["sessionOriginHint"] == "sdk"
+        assert "tags" not in sent["params"]
 
         transport.inject_message(make_success_response(sent["id"], LOAD_SESSION_RESULT))
         await task
@@ -677,6 +745,7 @@ class TestAddUserMessage:
         sent = transport.get_last_sent_parsed()
         assert sent["method"] == DroidServerMethod.ADD_USER_MESSAGE.value
         assert sent["params"]["text"] == "Hello world"
+        assert sent["params"]["userMessageSource"] == "sdk"
 
         transport.inject_message(make_success_response(sent["id"], {}))
         await task
@@ -782,6 +851,7 @@ class TestAddUserMessage:
                     "name": "notes.txt",
                 }
             ],
+            "userMessageSource": "sdk",
         }
 
         transport.inject_message(make_success_response(sent["id"], {}))
