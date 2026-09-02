@@ -1,0 +1,33 @@
+scripts/validate_distribution.py
+  943cdccc2683071a 1-126
+examples/interactive_session.py
+  943cdccc2683071a 24-26
+examples/factory_router.py
+  943cdccc2683071a 21,118-121,123-124
+pyproject.toml
+  943cdccc2683071a 28,44,53,63,68
+examples/structured_output_model.py
+  943cdccc2683071a 39-41,50
+.github/workflows/quality.yml
+  943cdccc2683071a 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "7b4f6f18b754268a4fe42260d6274397ff1ee161",
+  "prompts": {
+    "943cdccc2683071a": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "488abc40-ae2d-4072-8fbb-1f25f35bf6e2",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 268,
+      "total_deletions": 17,
+      "accepted_lines": 261,
+      "overriden_lines": 0
+    }
+  }
+}
