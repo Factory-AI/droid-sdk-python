@@ -9,10 +9,6 @@ permissions:
   actions: read
   contents: read
 
-concurrency:
-  group: publish-pypi
-  cancel-in-progress: false
-
 jobs:
   check-version:
     name: Check for version change
