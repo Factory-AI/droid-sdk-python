@@ -1,0 +1,23 @@
+.github/workflows/quality.yml
+  943cdccc2683071a 27,30,53,56,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "9e545ccb44c9ec979d387ecb917054c53561a84c",
+  "prompts": {
+    "943cdccc2683071a": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "488abc40-ae2d-4072-8fbb-1f25f35bf6e2",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 5,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
