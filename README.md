@@ -248,6 +248,26 @@ credentials, while model examples use bounded prompts and finite timeouts.
 See the complete command matrix and API contract in the
 [Python SDK documentation](https://docs.factory.ai/sdk/python).
 
+## Development checks
+
+Install the locked development environment, then run the same checks as CI:
+
+```bash
+uv sync --all-extras --dev --frozen
+uv run --frozen pytest
+uv run --frozen ruff format --check .
+uv run --frozen ruff check .
+uv run --frozen mypy
+uv run --frozen pyright
+uv build
+uv run --frozen --group package twine check dist/*
+uv run --frozen python scripts/validate_distribution.py
+```
+
+The normal test suite skips `tests/test_live_droid_exec.py`. Set
+`DROID_LIVE_TESTS=1` only when intentionally running tests that create real
+Droid sessions and consume model usage.
+
 ## Limitations
 
 - Local `droid` subprocesses only
