@@ -21,9 +21,9 @@ async def main() -> None:
             include_partial_messages=True,
             timeout=60,
         ) as second:
-            async for event in second:
-                if isinstance(event, TextDelta):
-                    print(event.text, end="", flush=True)
+            async for partial_event in second:
+                if isinstance(partial_event, TextDelta):
+                    print(partial_event.text, end="", flush=True)
         print()
 
 

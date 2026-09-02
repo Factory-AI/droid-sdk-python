@@ -18,6 +18,7 @@ import asyncio
 import struct
 import zlib
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from droid_sdk import Document, Image, Session
 
@@ -113,9 +114,14 @@ async def routed_model(
 
     def report_routing(notification: Mapping[str, object]) -> None:
         message = notification.get("message")
-        if isinstance(message, Mapping) and message.get("role") == "assistant":
+        if isinstance(message, Mapping):
+            message_fields = cast("Mapping[str, object]", message)
+        else:
+            return
+        if message_fields.get("role") == "assistant":
             decision.append(
-                f"{message.get('modelId')} (effort {message.get('reasoningEffort')})"
+                f"{message_fields.get('modelId')} "
+                f"(effort {message_fields.get('reasoningEffort')})"
             )
 
     async with Session(model="auto") as session:
