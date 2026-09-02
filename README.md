@@ -260,7 +260,7 @@ uv run --frozen ruff check .
 uv run --frozen mypy
 uv run --frozen pyright
 uv build
-uv run --frozen twine check dist/*
+uv run --frozen --group package twine check dist/*
 uv run --frozen python scripts/validate_distribution.py
 ```
 

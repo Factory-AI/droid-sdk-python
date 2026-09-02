@@ -25,13 +25,13 @@ dev = [
     "pyright",
     "ruff",
     "pytest-cov",
-    "twine",
     # The dev environment always includes the "mcp" extra's dependencies so
     # the in-process MCP server tests run without extra flags.
     "mcp>=1.27,<2",
     "starlette>=0.40",
     "uvicorn>=0.31,<1",
 ]
+package = ["twine"]
 
 [build-system]
 requires = ["hatchling"]
