@@ -88,6 +88,9 @@ from droid_sdk._high_level.extensions import (
     StdioMcpServerConfig,
     ToolInfo,
     ToolResponse,
+    ToolResultSchemas,
+    ToolSchemas,
+    ToolSource,
 )
 from droid_sdk._high_level.interactions import (
     ApplyPatchAction,
@@ -326,9 +329,12 @@ __all__: list[str] = [
     "ToolInfo",
     "ToolProgress",
     "ToolProgressUpdate",
+    "ToolResultSchemas",
     "ToolResponse",
     "ToolResult",
     "ToolResultBlock",
+    "ToolSchemas",
+    "ToolSource",
     "ToolUseBlock",
     "Transport",
     "UpdateSettingsResult",

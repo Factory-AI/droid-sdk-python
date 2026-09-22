@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from droid_sdk._high_level._immutable import (
+    FrozenJsonObject,
     freeze_json_object,
     freeze_secret_mapping,
 )
@@ -31,6 +32,70 @@ def _empty_str_mapping() -> Mapping[str, str]:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolResultSchemas:
+    """Declared schemas for a tool's result payloads."""
+
+    content: FrozenJsonObject
+    parsed_content: FrozenJsonObject | None = None
+
+    def __init__(
+        self,
+        *,
+        content: Mapping[str, object],
+        parsed_content: Mapping[str, object] | None = None,
+    ) -> None:
+        object.__setattr__(
+            self,
+            "content",
+            freeze_json_object(content, where="content"),
+        )
+        object.__setattr__(
+            self,
+            "parsed_content",
+            (
+                None
+                if parsed_content is None
+                else freeze_json_object(parsed_content, where="parsed_content")
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSchemas:
+    """Schemas advertised for a discovered tool."""
+
+    input: FrozenJsonObject
+    result: ToolResultSchemas | None = None
+    progress: FrozenJsonObject | None = None
+
+    def __init__(
+        self,
+        *,
+        input: Mapping[str, object],
+        result: ToolResultSchemas | None = None,
+        progress: Mapping[str, object] | None = None,
+    ) -> None:
+        object.__setattr__(
+            self,
+            "input",
+            freeze_json_object(input, where="input"),
+        )
+        object.__setattr__(self, "result", result)
+        object.__setattr__(
+            self,
+            "progress",
+            (
+                None
+                if progress is None
+                else freeze_json_object(progress, where="progress")
+            ),
+        )
+
+
+ToolSource = Literal["native", "mcp", "connector"]
+
+
+@dataclass(frozen=True, slots=True)
 class ToolInfo:
     id: str
     display_name: str
@@ -38,6 +103,8 @@ class ToolInfo:
     category: ToolCategory
     default_allowed: bool
     allowed: bool
+    source: ToolSource | None = None
+    schemas: ToolSchemas | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +118,8 @@ class ListToolsOptions:
     disabled_tools: Iterable[str] | None = None
     restrict_tools: Iterable[str] | None = None
     skip_permissions_unsafe: bool | None = None
+    include_schemas: bool | None = None
+    tool_ids: Iterable[str] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -58,6 +127,7 @@ class ListToolsOptions:
             "enabled_tools",
             "disabled_tools",
             "restrict_tools",
+            "tool_ids",
         ):
             value = getattr(self, name)
             if value is not None:

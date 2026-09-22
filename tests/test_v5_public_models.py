@@ -74,6 +74,8 @@ from droid_sdk import (
     ToolInfo,
     ToolResult,
     ToolResultBlock,
+    ToolResultSchemas,
+    ToolSchemas,
     ToolUseBlock,
 )
 from droid_sdk._high_level.output import prepare_output_adapter
@@ -376,13 +378,59 @@ def test_tool_overrides_accept_any_iterable_and_reject_strings() -> None:
     assert config.disabled_tools == frozenset({"Execute"})
     assert config.restrict_tools == frozenset({"Read", "Grep"})
 
-    options = ListToolsOptions(disabled_tools=["Execute"])
+    options = ListToolsOptions(disabled_tools=["Execute"], tool_ids=["Read"])
     assert options.disabled_tools == frozenset({"Execute"})
+    assert options.tool_ids == frozenset({"Read"})
 
     with pytest.raises(TypeError, match="disabled_tools"):
         SessionConfig(disabled_tools="Execute")
     with pytest.raises(TypeError, match="restrict_tools"):
         ListToolsOptions(restrict_tools="Read")
+    with pytest.raises(TypeError, match="tool_ids"):
+        ListToolsOptions(tool_ids="Read")
+
+
+def test_tool_schemas_are_recursive_and_immutable() -> None:
+    input_schema = {
+        "type": "object",
+        "properties": {"file_path": {"type": "string"}},
+    }
+    content_schema = {"type": "string"}
+    parsed_content_schema = {"type": "object", "required": ["lines"]}
+    progress_schema = {"type": "object", "required": ["bytes"]}
+    schemas = ToolSchemas(
+        input=input_schema,
+        result=ToolResultSchemas(
+            content=content_schema,
+            parsed_content=parsed_content_schema,
+        ),
+        progress=progress_schema,
+    )
+    tool = ToolInfo(
+        id="Read",
+        display_name="Read",
+        description="Read a file",
+        category=ToolCategory.READ,
+        default_allowed=True,
+        allowed=True,
+        source="native",
+        schemas=schemas,
+    )
+
+    input_schema["type"] = "array"
+    content_schema["type"] = "number"
+    parsed_content_schema["required"].append("content")
+    progress_schema["required"].append("total")
+
+    assert tool.schemas is not None
+    assert tool.schemas.input["type"] == "object"
+    assert isinstance(tool.schemas.input, MappingProxyType)
+    assert tool.schemas.result is not None
+    assert tool.schemas.result.content["type"] == "string"
+    assert tool.schemas.result.parsed_content is not None
+    assert tool.schemas.result.parsed_content["required"] == ("lines",)
+    assert tool.schemas.progress is not None
+    assert tool.schemas.progress["required"] == ("bytes",)
 
 
 def test_json_schema_is_recursive_and_rejects_non_json() -> None:

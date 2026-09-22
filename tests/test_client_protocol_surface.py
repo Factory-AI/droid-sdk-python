@@ -123,6 +123,8 @@ class TestListTools:
                 disabled_tool_ids=["execute"],
                 restrict_tool_ids=["read", "custom-tool"],
                 skip_permissions_unsafe=False,
+                include_schemas=True,
+                tool_ids=["read", "custom-tool"],
             ),
             {"tools": []},
         )
@@ -138,6 +140,8 @@ class TestListTools:
             "disabledToolIds": ["execute"],
             "restrictToolIds": ["read", "custom-tool"],
             "skipPermissionsUnsafe": False,
+            "includeSchemas": True,
+            "toolIds": ["read", "custom-tool"],
         }
 
         await client.close()
@@ -170,6 +174,73 @@ class TestListTools:
         assert result.tools[0].id == "read-cli"
         assert result.tools[0].default_allowed is True
         assert result.tools[0].currently_allowed is False
+        assert result.tools[0].source is None
+        assert result.tools[0].schemas is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_parses_advertised_tool_schemas(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        _, result = await _call(
+            transport,
+            client.list_tools(include_schemas=True, tool_ids=["Read", "Glob"]),
+            {
+                "tools": [
+                    {
+                        "id": "read-cli",
+                        "llmId": "Read",
+                        "defaultAllowed": True,
+                        "currentlyAllowed": True,
+                        "source": "native",
+                        "schemas": {
+                            "input": {
+                                "type": "object",
+                                "properties": {"file_path": {"type": "string"}},
+                            },
+                            "result": {
+                                "content": {"type": "string"},
+                                "parsedContent": {
+                                    "type": "object",
+                                    "properties": {"lines": {"type": "array"}},
+                                },
+                                "futureResultField": True,
+                            },
+                            "progress": {
+                                "type": "object",
+                                "properties": {"bytes": {"type": "number"}},
+                            },
+                            "futureSchemasField": True,
+                        },
+                    },
+                    {
+                        "id": "glob-cli",
+                        "llmId": "Glob",
+                        "defaultAllowed": True,
+                        "currentlyAllowed": True,
+                        "source": "connector",
+                        "schemas": {"input": {"type": "object"}},
+                    },
+                ]
+            },
+        )
+
+        read, glob = result.tools
+        assert read.source == "native"
+        assert read.schemas is not None
+        assert read.schemas.input["type"] == "object"
+        assert read.schemas.result is not None
+        assert read.schemas.result.content == {"type": "string"}
+        assert read.schemas.result.parsed_content is not None
+        assert read.schemas.result.parsed_content["type"] == "object"
+        assert read.schemas.progress is not None
+        assert read.schemas.progress["type"] == "object"
+        assert glob.source == "connector"
+        assert glob.schemas is not None
+        assert glob.schemas.result is None
+        assert glob.schemas.progress is None
 
         await client.close()
 

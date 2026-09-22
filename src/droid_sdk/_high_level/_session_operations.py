@@ -44,6 +44,8 @@ from droid_sdk._high_level.extensions import (
     SkillResource,
     SkillsResult,
     ToolInfo,
+    ToolResultSchemas,
+    ToolSchemas,
 )
 from droid_sdk._high_level.messages import ContextUsage
 from droid_sdk.schemas.enums import (
@@ -209,12 +211,15 @@ class SessionOperationsMixin:
         disabled_tools: Iterable[str] | None = None,
         restrict_tools: Iterable[str] | None = None,
         skip_permissions_unsafe: bool | None = None,
+        include_schemas: bool | None = None,
+        tool_ids: Iterable[str] | None = None,
     ) -> list[ToolInfo]:
         self._ensure_active()
         additional_tools = freeze_tool_ids("additional_tools", additional_tools)
         enabled_tools = freeze_tool_ids("enabled_tools", enabled_tools)
         disabled_tools = freeze_tool_ids("disabled_tools", disabled_tools)
         restrict_tools = freeze_tool_ids("restrict_tools", restrict_tools)
+        tool_ids = freeze_tool_ids("tool_ids", tool_ids)
         result = await self._require_client().list_tools(
             model_id=model,
             interaction_mode=(
@@ -227,6 +232,8 @@ class SessionOperationsMixin:
             disabled_tool_ids=list_or_none(disabled_tools),
             restrict_tool_ids=list_or_none(restrict_tools),
             skip_permissions_unsafe=skip_permissions_unsafe,
+            include_schemas=include_schemas,
+            tool_ids=list_or_none(tool_ids),
         )
         return [
             ToolInfo(
@@ -236,6 +243,23 @@ class SessionOperationsMixin:
                 category=tool_category(item.category),
                 default_allowed=item.default_allowed,
                 allowed=item.currently_allowed,
+                source=item.source,
+                schemas=(
+                    None
+                    if item.schemas is None
+                    else ToolSchemas(
+                        input=item.schemas.input,
+                        result=(
+                            None
+                            if item.schemas.result is None
+                            else ToolResultSchemas(
+                                content=item.schemas.result.content,
+                                parsed_content=item.schemas.result.parsed_content,
+                            )
+                        ),
+                        progress=item.schemas.progress,
+                    )
+                ),
             )
             for item in result.tools
         ]

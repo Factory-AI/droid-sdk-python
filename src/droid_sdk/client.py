@@ -1268,6 +1268,8 @@ class DroidClient:
         disabled_tool_ids: list[str] | None = None,
         restrict_tool_ids: list[str] | None = None,
         skip_permissions_unsafe: bool | None = None,
+        include_schemas: bool | None = None,
+        tool_ids: list[str] | None = None,
     ) -> ListToolsResult:
         """List native CLI tools with their allow-state.
 
@@ -1289,6 +1291,8 @@ class DroidClient:
             restrict_tool_ids: Restrict the hypothetical catalog to these IDs.
             skip_permissions_unsafe: Whether to hypothetically skip permission
                 checks.
+            include_schemas: Whether to include advertised tool schemas.
+            tool_ids: Optional tool IDs to include in the result.
 
         Returns:
             Typed ``ListToolsResult`` with a ``tools`` list.
@@ -1312,6 +1316,8 @@ class DroidClient:
                 disabled_tool_ids=disabled_tool_ids,
                 restrict_tool_ids=restrict_tool_ids,
                 skip_permissions_unsafe=skip_permissions_unsafe,
+                include_schemas=include_schemas,
+                tool_ids=tool_ids,
             )
         )
 

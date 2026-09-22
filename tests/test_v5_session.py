@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pytest
@@ -91,6 +91,7 @@ class FakeClient:
         self.load_calls: list[dict[str, Any]] = []
         self.message_calls: list[dict[str, Any]] = []
         self.mcp_calls: list[dict[str, Any]] = []
+        self.list_tools_calls: list[dict[str, Any]] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
         self.error_callbacks: list[Callable[[Exception], None]] = []
         self.permission_handler: Callable[..., Any] | None = None
@@ -163,6 +164,34 @@ class FakeClient:
     async def add_mcp_server(self, **kwargs: Any) -> SimpleNamespace:
         self.mcp_calls.append(kwargs)
         return SimpleNamespace(success=True)
+
+    async def list_tools(self, **kwargs: Any) -> SimpleNamespace:
+        self.list_tools_calls.append(kwargs)
+        return SimpleNamespace(
+            tools=[
+                SimpleNamespace(
+                    id="read-cli",
+                    llm_id="Read",
+                    display_name="Read",
+                    description="Read a file",
+                    category="read",
+                    default_allowed=True,
+                    currently_allowed=True,
+                    source="native",
+                    schemas=SimpleNamespace(
+                        input={
+                            "type": "object",
+                            "properties": {"file_path": {"type": "string"}},
+                        },
+                        result=SimpleNamespace(
+                            content={"type": "string"},
+                            parsed_content={"type": "object"},
+                        ),
+                        progress={"type": "object"},
+                    ),
+                )
+            ]
+        )
 
     async def fork_session(self, **kwargs: Any) -> SimpleNamespace:
         return await self._replacement_result()
@@ -710,6 +739,30 @@ async def test_active_turn_allows_non_turn_operations() -> None:
         await session.fork()
 
     await stream.aclose()
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_forwards_discovery_options_and_freezes_schemas() -> None:
+    session = Session(runtime=runtime())
+    await session.open()
+
+    tools = await session.list_tools(include_schemas=True, tool_ids=["Read"])
+
+    client = FakeClient.instances[0]
+    assert client.list_tools_calls[0]["include_schemas"] is True
+    assert client.list_tools_calls[0]["tool_ids"] == ["Read"]
+    assert len(tools) == 1
+    tool = tools[0]
+    assert tool.source == "native"
+    assert tool.schemas is not None
+    assert isinstance(tool.schemas.input, MappingProxyType)
+    assert tool.schemas.input["type"] == "object"
+    assert tool.schemas.result is not None
+    assert tool.schemas.result.content == {"type": "string"}
+    assert tool.schemas.result.parsed_content == {"type": "object"}
+    assert tool.schemas.progress == {"type": "object"}
+
     await session.close()
 
 

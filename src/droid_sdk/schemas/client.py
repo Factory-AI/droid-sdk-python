@@ -1314,6 +1314,12 @@ class ListToolsRequestParams(BaseModel):
         default=None, alias="skipPermissionsUnsafe"
     )
 
+    include_schemas: bool | None = Field(default=None, alias="includeSchemas")
+    """Whether tool schemas should be included."""
+
+    tool_ids: list[str] | None = Field(default=None, alias="toolIds")
+    """Optional tool IDs to include in the result."""
+
 
 class ListCommandsRequestParams(BaseModel):
     """Parameters for droid.list_commands request (empty)."""
@@ -2077,6 +2083,37 @@ class SubmitBugReportResult(BaseModel):
 # ============================================================
 
 
+ToolSource = Literal["native", "mcp", "connector"]
+"""Origin of a discovered tool."""
+
+
+class ToolResultSchemas(BaseModel):
+    """Declared schemas for a tool's result payloads."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    content: dict[str, Any]
+    """Schema for the tool result content."""
+
+    parsed_content: dict[str, Any] | None = Field(default=None, alias="parsedContent")
+    """Optional schema for the parsed tool result content."""
+
+
+class ToolSchemas(BaseModel):
+    """Schemas advertised for a discovered tool."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    input: dict[str, Any]
+    """Schema for the tool input."""
+
+    result: ToolResultSchemas | None = None
+    """Optional declared result schemas."""
+
+    progress: dict[str, Any] | None = None
+    """Optional declared progress schema."""
+
+
 class ExecToolInfo(BaseModel):
     """A native CLI tool entry returned by droid.list_tools."""
 
@@ -2102,6 +2139,12 @@ class ExecToolInfo(BaseModel):
 
     currently_allowed: bool = Field(alias="currentlyAllowed")
     """Whether the tool is currently allowed given the session config."""
+
+    source: ToolSource | None = None
+    """Tool origin, when reported by the CLI."""
+
+    schemas: ToolSchemas | None = None
+    """Tool schemas, when requested and advertised by the tool."""
 
 
 class ListToolsResult(BaseModel):

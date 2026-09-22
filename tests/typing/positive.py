@@ -50,6 +50,8 @@ from droid_sdk import (
     ToolCategory,
     ToolInfo,
     ToolResultBlock,
+    ToolResultSchemas,
+    ToolSchemas,
     ToolUseBlock,
     list_models,
     run,
@@ -136,8 +138,25 @@ tool = ToolInfo(
     category=ToolCategory.READ,
     default_allowed=True,
     allowed=True,
+    source="native",
+    schemas=ToolSchemas(
+        input={"type": "object"},
+        result=ToolResultSchemas(
+            content={"type": "string"},
+            parsed_content={"type": "object"},
+        ),
+        progress={"type": "object"},
+    ),
 )
 assert_type(tool.category, ToolCategory)
+assert_type(tool.source, Literal["native", "mcp", "connector"] | None)
+assert_type(tool.schemas, ToolSchemas | None)
+
+
+async def discover_tools(session: Session) -> None:
+    tools = await session.list_tools(include_schemas=True, tool_ids=["Read"])
+    assert_type(tools, list[ToolInfo])
+
 
 block = ToolResultBlock(
     tool_use_id="tool-1",
