@@ -19,7 +19,7 @@ JSONRPC_VERSION: Final[str] = "2.0"
 LEGACY_FACTORY_API_VERSION: Final[str] = "1.0.0"
 """Legacy Factory API version for backward compatibility."""
 
-FACTORY_PROTOCOL_VERSION: Final[str] = "1.192.0"
+FACTORY_PROTOCOL_VERSION: Final[str] = "1.221.0"
 """Current Factory protocol version."""
 
 FACTORY_CLIENT_HEADER: Final[str] = "X-Factory-Client"

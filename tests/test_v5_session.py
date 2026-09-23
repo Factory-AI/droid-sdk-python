@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pytest
@@ -12,6 +12,7 @@ import droid_sdk._high_level.session as session_module
 from droid_sdk import (
     Document,
     DroidConnectionError,
+    DroidProtocolError,
     ErrorEvent,
     ErrorType,
     HttpHeader,
@@ -30,6 +31,7 @@ from droid_sdk import (
     SessionReplacedError,
     SessionReplacementError,
     TextDocumentSource,
+    ToolInfoWithSchemas,
 )
 from droid_sdk._util import cancellation_checkpoint
 from droid_sdk.errors import SessionError
@@ -83,6 +85,7 @@ class FakeClient:
     hang_interrupt: ClassVar[bool] = False
     supports_system_prompt: ClassVar[bool] = True
     load_system_prompt: ClassVar[object] = None
+    list_tools_result: ClassVar[SimpleNamespace | None] = None
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
@@ -91,6 +94,7 @@ class FakeClient:
         self.load_calls: list[dict[str, Any]] = []
         self.message_calls: list[dict[str, Any]] = []
         self.mcp_calls: list[dict[str, Any]] = []
+        self.list_tools_calls: list[dict[str, Any]] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
         self.error_callbacks: list[Callable[[Exception], None]] = []
         self.permission_handler: Callable[..., Any] | None = None
@@ -163,6 +167,36 @@ class FakeClient:
     async def add_mcp_server(self, **kwargs: Any) -> SimpleNamespace:
         self.mcp_calls.append(kwargs)
         return SimpleNamespace(success=True)
+
+    async def list_tools(self, **kwargs: Any) -> SimpleNamespace:
+        self.list_tools_calls.append(kwargs)
+        if self.list_tools_result is not None:
+            return self.list_tools_result
+        return SimpleNamespace(
+            tools=[
+                SimpleNamespace(
+                    id="read-cli",
+                    llm_id="Read",
+                    display_name="Read",
+                    description="Read a file",
+                    category="read",
+                    default_allowed=True,
+                    currently_allowed=True,
+                    source="native",
+                    schemas=SimpleNamespace(
+                        input={
+                            "type": "object",
+                            "properties": {"file_path": {"type": "string"}},
+                        },
+                        result=SimpleNamespace(
+                            content={"type": "string"},
+                            parsed_content={"type": "object"},
+                        ),
+                        progress={"type": "object"},
+                    ),
+                )
+            ]
+        )
 
     async def fork_session(self, **kwargs: Any) -> SimpleNamespace:
         return await self._replacement_result()
@@ -248,6 +282,7 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.hang_interrupt = False
     FakeClient.supports_system_prompt = True
     FakeClient.load_system_prompt = None
+    FakeClient.list_tools_result = None
     monkeypatch.setattr(client_module, "DroidClient", FakeClient)
 
 
@@ -710,6 +745,119 @@ async def test_active_turn_allows_non_turn_operations() -> None:
         await session.fork()
 
     await stream.aclose()
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_forwards_discovery_options_and_freezes_schemas() -> None:
+    session = Session(runtime=runtime())
+    await session.open()
+
+    tools = await session.list_tools(include_schemas=True, tool_ids=["Read"])
+
+    client = FakeClient.instances[0]
+    assert client.list_tools_calls[0]["include_schemas"] is True
+    assert client.list_tools_calls[0]["tool_ids"] == ["Read"]
+    assert len(tools) == 1
+    tool = tools[0]
+    assert isinstance(tool, ToolInfoWithSchemas)
+    assert tool.source == "native"
+    assert isinstance(tool.schemas.input, MappingProxyType)
+    assert tool.schemas.input["type"] == "object"
+    assert tool.schemas.result is not None
+    assert tool.schemas.result.content == {"type": "string"}
+    assert tool.schemas.result.parsed_content == {"type": "object"}
+    assert tool.schemas.progress == {"type": "object"}
+
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_preserves_omitted_schema_members() -> None:
+    def tool(**overrides: object) -> SimpleNamespace:
+        values: dict[str, object] = {
+            "id": "tool",
+            "llm_id": "Tool",
+            "display_name": "Tool",
+            "description": "Tool",
+            "category": "other",
+            "default_allowed": True,
+            "currently_allowed": True,
+            "source": None,
+            "schemas": None,
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    FakeClient.list_tools_result = SimpleNamespace(
+        tools=[
+            tool(id="legacy", llm_id="Legacy"),
+            tool(
+                id="input-only",
+                llm_id="InputOnly",
+                source="mcp",
+                schemas=SimpleNamespace(
+                    input={"type": "object"},
+                    result=None,
+                    progress=None,
+                ),
+            ),
+            tool(
+                id="content-only",
+                llm_id="ContentOnly",
+                source="connector",
+                schemas=SimpleNamespace(
+                    input={"type": "object"},
+                    result=SimpleNamespace(
+                        content={"type": "string"},
+                        parsed_content=None,
+                    ),
+                    progress=None,
+                ),
+            ),
+        ]
+    )
+    session = Session(runtime=runtime())
+    await session.open()
+
+    legacy, input_only, content_only = await session.list_tools()
+
+    assert legacy.source is None
+    assert legacy.schemas is None
+    assert input_only.schemas is not None
+    assert input_only.schemas.result is None
+    assert input_only.schemas.progress is None
+    assert content_only.schemas is not None
+    assert content_only.schemas.result is not None
+    assert content_only.schemas.result.parsed_content is None
+    assert content_only.schemas.progress is None
+
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_rejects_missing_requested_schemas() -> None:
+    FakeClient.list_tools_result = SimpleNamespace(
+        tools=[
+            SimpleNamespace(
+                id="legacy",
+                llm_id="Legacy",
+                display_name="Legacy",
+                description="Legacy tool",
+                category="other",
+                default_allowed=True,
+                currently_allowed=True,
+                source=None,
+                schemas=None,
+            )
+        ]
+    )
+    session = Session(runtime=runtime())
+    await session.open()
+
+    with pytest.raises(DroidProtocolError, match="Legacy"):
+        await session.list_tools(include_schemas=True)
+
     await session.close()
 
 

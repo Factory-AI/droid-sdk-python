@@ -102,6 +102,11 @@ def thaw_json(value: FrozenJsonValue) -> JsonValue:
     return value
 
 
+def thaw_json_object(value: FrozenJsonObject) -> JsonObject:
+    """Return an ordinary JSON object suitable for serialization."""
+    return cast("JsonObject", thaw_json(value))
+
+
 def freeze_secret_mapping(value: Mapping[str, str]) -> Mapping[str, str]:
     return RedactedStrMapping(value)
 

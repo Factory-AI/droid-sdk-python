@@ -14,10 +14,12 @@ import pytest
 from pydantic import ValidationError
 
 from droid_sdk.client import DroidClient
-from droid_sdk.errors import SessionError
+from droid_sdk.errors import DroidProtocolError, SessionError
 from droid_sdk.protocol import COMPACTION_TIMEOUT
 from droid_sdk.schemas.client import (
     ApiSessionSource,
+    ExecToolInfoWithSchemas,
+    ListToolsResultWithSchemas,
     OutputFormat,
     RewindFileCreation,
     RewindFileSnapshot,
@@ -123,6 +125,8 @@ class TestListTools:
                 disabled_tool_ids=["execute"],
                 restrict_tool_ids=["read", "custom-tool"],
                 skip_permissions_unsafe=False,
+                include_schemas=True,
+                tool_ids=["read", "custom-tool"],
             ),
             {"tools": []},
         )
@@ -138,6 +142,8 @@ class TestListTools:
             "disabledToolIds": ["execute"],
             "restrictToolIds": ["read", "custom-tool"],
             "skipPermissionsUnsafe": False,
+            "includeSchemas": True,
+            "toolIds": ["read", "custom-tool"],
         }
 
         await client.close()
@@ -170,6 +176,102 @@ class TestListTools:
         assert result.tools[0].id == "read-cli"
         assert result.tools[0].default_allowed is True
         assert result.tools[0].currently_allowed is False
+        assert result.tools[0].source is None
+        assert result.tools[0].schemas is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_parses_advertised_tool_schemas(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        _, result = await _call(
+            transport,
+            client.list_tools(include_schemas=True, tool_ids=["Read", "Glob"]),
+            {
+                "tools": [
+                    {
+                        "id": "read-cli",
+                        "llmId": "Read",
+                        "defaultAllowed": True,
+                        "currentlyAllowed": True,
+                        "source": "native",
+                        "schemas": {
+                            "input": {
+                                "type": "object",
+                                "properties": {"file_path": {"type": "string"}},
+                            },
+                            "result": {
+                                "content": {"type": "string"},
+                                "parsedContent": {
+                                    "type": "object",
+                                    "properties": {"lines": {"type": "array"}},
+                                },
+                                "futureResultField": True,
+                            },
+                            "progress": {
+                                "type": "object",
+                                "properties": {"bytes": {"type": "number"}},
+                            },
+                            "futureSchemasField": True,
+                        },
+                    },
+                    {
+                        "id": "glob-cli",
+                        "llmId": "Glob",
+                        "defaultAllowed": True,
+                        "currentlyAllowed": True,
+                        "source": "connector",
+                        "schemas": {"input": {"type": "object"}},
+                    },
+                ]
+            },
+        )
+
+        read, glob = result.tools
+        assert isinstance(result, ListToolsResultWithSchemas)
+        assert isinstance(read, ExecToolInfoWithSchemas)
+        assert read.source == "native"
+        assert read.schemas.input["type"] == "object"
+        assert read.schemas.result is not None
+        assert read.schemas.result.content == {"type": "string"}
+        assert read.schemas.result.parsed_content is not None
+        assert read.schemas.result.parsed_content["type"] == "object"
+        assert read.schemas.progress is not None
+        assert read.schemas.progress["type"] == "object"
+        assert glob.source == "connector"
+        assert glob.schemas.result is None
+        assert glob.schemas.progress is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_rejects_missing_requested_schemas(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        task = _fire(client.list_tools(include_schemas=True))
+        await asyncio.sleep(0.01)
+        sent = transport.get_last_sent_parsed()
+        transport.inject_message(
+            make_success_response(
+                sent["id"],
+                {
+                    "tools": [
+                        {
+                            "id": "read-cli",
+                            "llmId": "Read",
+                            "defaultAllowed": True,
+                            "currentlyAllowed": True,
+                        }
+                    ]
+                },
+            )
+        )
+
+        with pytest.raises(DroidProtocolError, match="Read"):
+            await task
 
         await client.close()
 

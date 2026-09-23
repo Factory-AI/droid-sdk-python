@@ -66,7 +66,7 @@ class TestConstants:
         assert LEGACY_FACTORY_API_VERSION == "1.0.0"
 
     def test_factory_protocol_version(self) -> None:
-        assert FACTORY_PROTOCOL_VERSION == "1.192.0"
+        assert FACTORY_PROTOCOL_VERSION == "1.221.0"
 
     def test_factory_client_header(self) -> None:
         assert FACTORY_CLIENT_HEADER == "X-Factory-Client"
