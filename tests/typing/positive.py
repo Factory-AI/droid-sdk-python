@@ -151,6 +151,8 @@ tool = ToolInfo(
 assert_type(tool.category, ToolCategory)
 assert_type(tool.source, Literal["native", "mcp", "connector"] | None)
 assert_type(tool.schemas, ToolSchemas | None)
+if tool.schemas is not None:
+    assert_type(tool.schemas.to_dict(), JsonObject)
 
 
 async def discover_tools(session: Session) -> None:

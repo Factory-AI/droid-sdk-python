@@ -145,6 +145,24 @@ Use `list_tools()`, `list_skills()`, MCP operations, `context()`,
 `enter_spec()`/`leave_spec()`, `rename()`, and raw filtered
 `on_notification()` subscriptions for ongoing sessions.
 
+Discover runtime tool schemas when building custom tool UIs or validators:
+
+```python
+async with Session() as session:
+    tools = await session.list_tools(
+        include_schemas=True,
+        tool_ids=["Read", "Edit"],
+    )
+
+    for tool in tools:
+        if tool.schemas is not None:
+            print(tool.id, tool.source, tool.schemas.to_dict())
+```
+
+Schema discovery is opt-in. Older Droid versions may omit `source` and
+`schemas`, and tools may omit result or progress schemas they do not declare.
+`to_dict()` returns ordinary JSON-compatible dictionaries.
+
 ## SDK attribution
 
 The SDK owns its producer attribution. It sets spawned Droid processes to

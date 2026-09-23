@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import json
 import os
 import subprocess
 import sys
@@ -378,16 +379,13 @@ def test_tool_overrides_accept_any_iterable_and_reject_strings() -> None:
     assert config.disabled_tools == frozenset({"Execute"})
     assert config.restrict_tools == frozenset({"Read", "Grep"})
 
-    options = ListToolsOptions(disabled_tools=["Execute"], tool_ids=["Read"])
+    options = ListToolsOptions(disabled_tools=["Execute"])
     assert options.disabled_tools == frozenset({"Execute"})
-    assert options.tool_ids == frozenset({"Read"})
 
     with pytest.raises(TypeError, match="disabled_tools"):
         SessionConfig(disabled_tools="Execute")
     with pytest.raises(TypeError, match="restrict_tools"):
         ListToolsOptions(restrict_tools="Read")
-    with pytest.raises(TypeError, match="tool_ids"):
-        ListToolsOptions(tool_ids="Read")
 
 
 def test_tool_schemas_are_recursive_and_immutable() -> None:
@@ -431,6 +429,20 @@ def test_tool_schemas_are_recursive_and_immutable() -> None:
     assert tool.schemas.result.parsed_content["required"] == ("lines",)
     assert tool.schemas.progress is not None
     assert tool.schemas.progress["required"] == ("bytes",)
+
+    schema_dict = tool.schemas.to_dict()
+    assert schema_dict == {
+        "input": {
+            "type": "object",
+            "properties": {"file_path": {"type": "string"}},
+        },
+        "result": {
+            "content": {"type": "string"},
+            "parsed_content": {"type": "object", "required": ["lines"]},
+        },
+        "progress": {"type": "object", "required": ["bytes"]},
+    }
+    assert json.loads(json.dumps(schema_dict)) == schema_dict
 
 
 def test_json_schema_is_recursive_and_rejects_non_json() -> None:

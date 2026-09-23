@@ -83,6 +83,7 @@ class FakeClient:
     hang_interrupt: ClassVar[bool] = False
     supports_system_prompt: ClassVar[bool] = True
     load_system_prompt: ClassVar[object] = None
+    list_tools_result: ClassVar[SimpleNamespace | None] = None
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
@@ -167,6 +168,8 @@ class FakeClient:
 
     async def list_tools(self, **kwargs: Any) -> SimpleNamespace:
         self.list_tools_calls.append(kwargs)
+        if self.list_tools_result is not None:
+            return self.list_tools_result
         return SimpleNamespace(
             tools=[
                 SimpleNamespace(
@@ -277,6 +280,7 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.hang_interrupt = False
     FakeClient.supports_system_prompt = True
     FakeClient.load_system_prompt = None
+    FakeClient.list_tools_result = None
     monkeypatch.setattr(client_module, "DroidClient", FakeClient)
 
 
@@ -762,6 +766,69 @@ async def test_list_tools_forwards_discovery_options_and_freezes_schemas() -> No
     assert tool.schemas.result.content == {"type": "string"}
     assert tool.schemas.result.parsed_content == {"type": "object"}
     assert tool.schemas.progress == {"type": "object"}
+
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_preserves_omitted_schema_members() -> None:
+    def tool(**overrides: object) -> SimpleNamespace:
+        values: dict[str, object] = {
+            "id": "tool",
+            "llm_id": "Tool",
+            "display_name": "Tool",
+            "description": "Tool",
+            "category": "other",
+            "default_allowed": True,
+            "currently_allowed": True,
+            "source": None,
+            "schemas": None,
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    FakeClient.list_tools_result = SimpleNamespace(
+        tools=[
+            tool(id="legacy", llm_id="Legacy"),
+            tool(
+                id="input-only",
+                llm_id="InputOnly",
+                source="mcp",
+                schemas=SimpleNamespace(
+                    input={"type": "object"},
+                    result=None,
+                    progress=None,
+                ),
+            ),
+            tool(
+                id="content-only",
+                llm_id="ContentOnly",
+                source="connector",
+                schemas=SimpleNamespace(
+                    input={"type": "object"},
+                    result=SimpleNamespace(
+                        content={"type": "string"},
+                        parsed_content=None,
+                    ),
+                    progress=None,
+                ),
+            ),
+        ]
+    )
+    session = Session(runtime=runtime())
+    await session.open()
+
+    legacy, input_only, content_only = await session.list_tools(include_schemas=True)
+
+    assert legacy.source is None
+    assert legacy.schemas is None
+    assert input_only.schemas is not None
+    assert input_only.schemas.result is None
+    assert input_only.schemas.progress is None
+    assert content_only.schemas is not None
+    assert content_only.schemas.result is not None
+    assert content_only.schemas.result.parsed_content is None
+    assert content_only.schemas.progress is None
 
     await session.close()
 

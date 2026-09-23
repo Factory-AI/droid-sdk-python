@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     )
     from droid_sdk._high_level.session import Session
     from droid_sdk.client import DroidClient
+    from droid_sdk.schemas.client import ToolSchemas as WireToolSchemas
 
 
 class _Unset:
@@ -78,6 +79,24 @@ class _Unset:
 
 
 _UNSET = _Unset()
+
+
+def _tool_schemas_from_wire(value: WireToolSchemas | None) -> ToolSchemas | None:
+    if value is None:
+        return None
+    result = value.result
+    return ToolSchemas(
+        input=value.input,
+        result=(
+            None
+            if result is None
+            else ToolResultSchemas(
+                content=result.content,
+                parsed_content=result.parsed_content,
+            )
+        ),
+        progress=value.progress,
+    )
 
 
 class SessionOperationsMixin:
@@ -214,6 +233,13 @@ class SessionOperationsMixin:
         include_schemas: bool | None = None,
         tool_ids: Iterable[str] | None = None,
     ) -> list[ToolInfo]:
+        """List available tools under optional hypothetical settings.
+
+        Set ``include_schemas=True`` to include runtime input, result, and
+        progress schemas. Use ``tool_ids`` to return only selected tools.
+        Schema fields are optional because older Droid versions and tools
+        without declared result or progress payloads omit them.
+        """
         self._ensure_active()
         additional_tools = freeze_tool_ids("additional_tools", additional_tools)
         enabled_tools = freeze_tool_ids("enabled_tools", enabled_tools)
@@ -244,22 +270,7 @@ class SessionOperationsMixin:
                 default_allowed=item.default_allowed,
                 allowed=item.currently_allowed,
                 source=item.source,
-                schemas=(
-                    None
-                    if item.schemas is None
-                    else ToolSchemas(
-                        input=item.schemas.input,
-                        result=(
-                            None
-                            if item.schemas.result is None
-                            else ToolResultSchemas(
-                                content=item.schemas.result.content,
-                                parsed_content=item.schemas.result.parsed_content,
-                            )
-                        ),
-                        progress=item.schemas.progress,
-                    )
-                ),
+                schemas=_tool_schemas_from_wire(item.schemas),
             )
             for item in result.tools
         ]

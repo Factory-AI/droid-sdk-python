@@ -15,6 +15,17 @@ async def main() -> None:
         await session.update_settings(autonomy=Autonomy.LOW)
         print(await session.context())
         print([tool.id for tool in await session.list_tools()])
+        schema_tools = await session.list_tools(
+            include_schemas=True,
+            tool_ids=["Read", "Edit"],
+        )
+        print(
+            {
+                tool.id: tool.schemas.to_dict()
+                for tool in schema_tools
+                if tool.schemas is not None
+            }
+        )
         print([skill.name for skill in (await session.list_skills()).skills])
         await session.enter_spec()
         await session.leave_spec()

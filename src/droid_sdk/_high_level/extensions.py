@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from droid_sdk._high_level._immutable import (
     FrozenJsonObject,
+    JsonObject,
     freeze_json_object,
     freeze_secret_mapping,
+    thaw_json_object,
 )
 from droid_sdk._high_level.config import freeze_tool_ids
 from droid_sdk._high_level.enums import (
@@ -33,10 +35,13 @@ def _empty_str_mapping() -> Mapping[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class ToolResultSchemas:
-    """Declared schemas for a tool's result payloads."""
+    """Schemas for a tool's result content."""
 
     content: FrozenJsonObject
+    """Schema for ``tool_result.content``."""
+
     parsed_content: FrozenJsonObject | None = None
+    """Schema for parsed JSON content, when the tool declares one."""
 
     def __init__(
         self,
@@ -59,14 +64,26 @@ class ToolResultSchemas:
             ),
         )
 
+    def to_dict(self) -> JsonObject:
+        """Return JSON-compatible schema dictionaries."""
+        value: JsonObject = {"content": thaw_json_object(self.content)}
+        if self.parsed_content is not None:
+            value["parsed_content"] = thaw_json_object(self.parsed_content)
+        return value
+
 
 @dataclass(frozen=True, slots=True)
 class ToolSchemas:
-    """Schemas advertised for a discovered tool."""
+    """Input, result, and progress schemas advertised by a tool."""
 
     input: FrozenJsonObject
+    """Schema for the tool's input."""
+
     result: ToolResultSchemas | None = None
+    """Result schemas, when the tool declares result content."""
+
     progress: FrozenJsonObject | None = None
+    """Progress schema, when the tool reports structured progress."""
 
     def __init__(
         self,
@@ -91,8 +108,18 @@ class ToolSchemas:
             ),
         )
 
+    def to_dict(self) -> JsonObject:
+        """Return the complete descriptor as JSON-compatible dictionaries."""
+        value: JsonObject = {"input": thaw_json_object(self.input)}
+        if self.result is not None:
+            value["result"] = self.result.to_dict()
+        if self.progress is not None:
+            value["progress"] = thaw_json_object(self.progress)
+        return value
+
 
 ToolSource = Literal["native", "mcp", "connector"]
+"""Origin of a discovered tool."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +131,10 @@ class ToolInfo:
     default_allowed: bool
     allowed: bool
     source: ToolSource | None = None
+    """Tool origin, or ``None`` when an older Droid version omits it."""
+
     schemas: ToolSchemas | None = None
+    """Runtime schemas when requested and supported."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +148,6 @@ class ListToolsOptions:
     disabled_tools: Iterable[str] | None = None
     restrict_tools: Iterable[str] | None = None
     skip_permissions_unsafe: bool | None = None
-    include_schemas: bool | None = None
-    tool_ids: Iterable[str] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -127,7 +155,6 @@ class ListToolsOptions:
             "enabled_tools",
             "disabled_tools",
             "restrict_tools",
-            "tool_ids",
         ):
             value = getattr(self, name)
             if value is not None:
