@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from typing_extensions import assert_type
@@ -49,6 +49,7 @@ from droid_sdk import (
     TextDelta,
     ToolCategory,
     ToolInfo,
+    ToolInfoWithSchemas,
     ToolResultBlock,
     ToolResultSchemas,
     ToolSchemas,
@@ -57,6 +58,7 @@ from droid_sdk import (
     run,
 )
 from droid_sdk._high_level.output import OutputAdapter, prepare_output_adapter
+from droid_sdk.low_level import DroidClient
 from droid_sdk.observability import (
     LogEvent,
     Logger,
@@ -65,6 +67,7 @@ from droid_sdk.observability import (
     TraceContext,
     TraceContextProvider,
 )
+from droid_sdk.schemas import ListToolsResultWithSchemas
 
 
 class Review(BaseModel):
@@ -157,7 +160,14 @@ if tool.schemas is not None:
 
 async def discover_tools(session: Session) -> None:
     tools = await session.list_tools(include_schemas=True, tool_ids=["Read"])
-    assert_type(tools, list[ToolInfo])
+    assert_type(tools, list[ToolInfoWithSchemas])
+    assert_type(tools[0].schemas, ToolSchemas)
+
+
+async def discover_low_level_tools(client: DroidClient) -> None:
+    result = await client.list_tools(include_schemas=True, tool_ids=["Read"])
+    assert_type(result, ListToolsResultWithSchemas)
+    assert_type(result.tools[0].schemas.input, dict[str, Any])
 
 
 block = ToolResultBlock(

@@ -121,6 +121,7 @@ __all__ = [  # noqa: RUF022
     "CustomCommandInfo",
     "DocumentSource",
     "ExecToolInfo",
+    "ExecToolInfoWithSchemas",
     "ExecuteRewindRequest",
     "ExecuteRewindRequestParams",
     "ExecuteRewindResponse",
@@ -182,6 +183,7 @@ __all__ = [  # noqa: RUF022
     "ListToolsRequestParams",
     "ListToolsResponse",
     "ListToolsResult",
+    "ListToolsResultWithSchemas",
     "LoadSessionRequest",
     "LoadSessionRequestParams",
     "LoadSessionResponse",
@@ -2114,8 +2116,8 @@ class ToolSchemas(BaseModel):
     """Optional declared progress schema."""
 
 
-class ExecToolInfo(BaseModel):
-    """A native CLI tool entry returned by droid.list_tools."""
+class _ExecToolInfoBase(BaseModel):
+    """Fields shared by tool discovery responses."""
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
@@ -2143,8 +2145,19 @@ class ExecToolInfo(BaseModel):
     source: ToolSource | None = None
     """Tool origin, when reported by the CLI."""
 
+
+class ExecToolInfo(_ExecToolInfoBase):
+    """A native CLI tool entry returned by droid.list_tools."""
+
     schemas: ToolSchemas | None = None
     """Tool schemas, when requested and advertised by the tool."""
+
+
+class ExecToolInfoWithSchemas(_ExecToolInfoBase):
+    """A discovered tool with schemas explicitly requested."""
+
+    schemas: ToolSchemas
+    """Tool schemas guaranteed by ``includeSchemas``."""
 
 
 class ListToolsResult(BaseModel):
@@ -2154,6 +2167,15 @@ class ListToolsResult(BaseModel):
 
     tools: list[ExecToolInfo]
     """Available native CLI tools with their allow-state."""
+
+
+class ListToolsResultWithSchemas(BaseModel):
+    """Result for droid.list_tools when schemas are requested."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    tools: list[ExecToolInfoWithSchemas]
+    """Available tools with guaranteed input schemas."""
 
 
 class CustomCommandInfo(BaseModel):

@@ -177,6 +177,7 @@ def test_root_export_snapshot_is_exact() -> None:
         "ToolConfirmationOutcome",
         "ToolConfirmationType",
         "ToolInfo",
+        "ToolInfoWithSchemas",
         "ToolProgress",
         "ToolProgressUpdate",
         "ToolResultSchemas",

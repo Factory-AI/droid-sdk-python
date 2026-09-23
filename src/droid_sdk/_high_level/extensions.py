@@ -138,6 +138,20 @@ class ToolInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolInfoWithSchemas:
+    """A discovered tool with schemas explicitly requested."""
+
+    id: str
+    display_name: str
+    description: str
+    category: ToolCategory
+    default_allowed: bool
+    allowed: bool
+    schemas: ToolSchemas
+    source: ToolSource | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ListToolsOptions:
     model: str | None = None
     mode: Mode | None = None

@@ -155,13 +155,13 @@ async with Session() as session:
     )
 
     for tool in tools:
-        if tool.schemas is not None:
-            print(tool.id, tool.source, tool.schemas.to_dict())
+        print(tool.id, tool.source, tool.schemas.to_dict())
 ```
 
-Schema discovery is opt-in. Older Droid versions may omit `source` and
-`schemas`, and tools may omit result or progress schemas they do not declare.
-`to_dict()` returns ordinary JSON-compatible dictionaries.
+Schema discovery is opt-in. When requested, every returned tool has an input
+schema; older Droid versions that cannot provide schemas raise
+`DroidProtocolError`. Tools may omit result or progress schemas they do not
+declare. `to_dict()` returns ordinary JSON-compatible dictionaries.
 
 ## SDK attribution
 

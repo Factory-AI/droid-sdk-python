@@ -20,7 +20,7 @@ import dataclasses
 import logging
 from collections.abc import AsyncIterator, Callable, Sequence
 from types import TracebackType  # noqa: TC003
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from typing_extensions import Self
 
@@ -29,6 +29,7 @@ from droid_sdk.errors import (
     ConnectionError as DroidConnectionError,
 )
 from droid_sdk.errors import (
+    ProtocolError,
     SessionError,
 )
 from droid_sdk.protocol import (
@@ -72,6 +73,7 @@ from droid_sdk.schemas.client import (
     ListSkillsResult,
     ListToolsRequestParams,
     ListToolsResult,
+    ListToolsResultWithSchemas,
     LoadSessionRequestParams,
     LoadSessionResult,
     McpOAuthOptions,
@@ -1255,6 +1257,60 @@ class DroidClient:
         )
         return ListModelsResult.model_validate(response.get("result", {}))
 
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model_id: str | None = None,
+        autonomy_mode: AutonomyMode | None = None,
+        interaction_mode: DroidInteractionMode | None = None,
+        autonomy_level: AutonomyLevel | None = None,
+        spec_mode_model_id: str | None = None,
+        additional_tool_ids: list[str] | None = None,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: Literal[True],
+        tool_ids: list[str] | None = None,
+    ) -> ListToolsResultWithSchemas: ...
+
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model_id: str | None = None,
+        autonomy_mode: AutonomyMode | None = None,
+        interaction_mode: DroidInteractionMode | None = None,
+        autonomy_level: AutonomyLevel | None = None,
+        spec_mode_model_id: str | None = None,
+        additional_tool_ids: list[str] | None = None,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: Literal[False] | None = None,
+        tool_ids: list[str] | None = None,
+    ) -> ListToolsResult: ...
+
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model_id: str | None = None,
+        autonomy_mode: AutonomyMode | None = None,
+        interaction_mode: DroidInteractionMode | None = None,
+        autonomy_level: AutonomyLevel | None = None,
+        spec_mode_model_id: str | None = None,
+        additional_tool_ids: list[str] | None = None,
+        enabled_tool_ids: list[str] | None = None,
+        disabled_tool_ids: list[str] | None = None,
+        restrict_tool_ids: list[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: bool | None,
+        tool_ids: list[str] | None = None,
+    ) -> ListToolsResult | ListToolsResultWithSchemas: ...
+
     async def list_tools(
         self,
         *,
@@ -1270,7 +1326,7 @@ class DroidClient:
         skip_permissions_unsafe: bool | None = None,
         include_schemas: bool | None = None,
         tool_ids: list[str] | None = None,
-    ) -> ListToolsResult:
+    ) -> ListToolsResult | ListToolsResultWithSchemas:
         """List native CLI tools with their allow-state.
 
         Sends ``droid.list_tools``. This can be called before session
@@ -1291,14 +1347,16 @@ class DroidClient:
             restrict_tool_ids: Restrict the hypothetical catalog to these IDs.
             skip_permissions_unsafe: Whether to hypothetically skip permission
                 checks.
-            include_schemas: Whether to include advertised tool schemas.
+            include_schemas: Whether to require advertised tool schemas.
             tool_ids: Optional tool IDs to include in the result.
 
         Returns:
-            Typed ``ListToolsResult`` with a ``tools`` list.
+            ``ListToolsResultWithSchemas`` when schemas are requested;
+            otherwise ``ListToolsResult``.
 
         Raises:
-            ProtocolError: If the server returns an error.
+            ProtocolError: If the server returns an error or omits requested
+                tool schemas.
             ConnectionError: If the client has been closed.
         """
         self._ensure_not_closed()
@@ -1326,7 +1384,23 @@ class DroidClient:
             params=params,
         )
 
-        return ListToolsResult.model_validate(response.get("result", {}))
+        result = ListToolsResult.model_validate(response.get("result", {}))
+        if include_schemas is not True:
+            return result
+
+        missing_schema_ids = [
+            tool.llm_id or tool.id for tool in result.tools if tool.schemas is None
+        ]
+        if missing_schema_ids:
+            missing = ", ".join(missing_schema_ids)
+            raise ProtocolError(
+                "The installed Droid version did not return requested schemas "
+                f"for tool IDs: {missing}. Update Droid and try again."
+            )
+
+        return ListToolsResultWithSchemas.model_validate(
+            result.model_dump(by_alias=True)
+        )
 
     async def list_commands(self) -> ListCommandsResult:
         """List custom slash commands.

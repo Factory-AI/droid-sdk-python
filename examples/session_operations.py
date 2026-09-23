@@ -19,13 +19,7 @@ async def main() -> None:
             include_schemas=True,
             tool_ids=["Read", "Edit"],
         )
-        print(
-            {
-                tool.id: tool.schemas.to_dict()
-                for tool in schema_tools
-                if tool.schemas is not None
-            }
-        )
+        print({tool.id: tool.schemas.to_dict() for tool in schema_tools})
         print([skill.name for skill in (await session.list_skills()).skills])
         await session.enter_spec()
         await session.leave_spec()

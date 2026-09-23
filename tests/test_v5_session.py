@@ -12,6 +12,7 @@ import droid_sdk._high_level.session as session_module
 from droid_sdk import (
     Document,
     DroidConnectionError,
+    DroidProtocolError,
     ErrorEvent,
     ErrorType,
     HttpHeader,
@@ -30,6 +31,7 @@ from droid_sdk import (
     SessionReplacedError,
     SessionReplacementError,
     TextDocumentSource,
+    ToolInfoWithSchemas,
 )
 from droid_sdk._util import cancellation_checkpoint
 from droid_sdk.errors import SessionError
@@ -758,8 +760,8 @@ async def test_list_tools_forwards_discovery_options_and_freezes_schemas() -> No
     assert client.list_tools_calls[0]["tool_ids"] == ["Read"]
     assert len(tools) == 1
     tool = tools[0]
+    assert isinstance(tool, ToolInfoWithSchemas)
     assert tool.source == "native"
-    assert tool.schemas is not None
     assert isinstance(tool.schemas.input, MappingProxyType)
     assert tool.schemas.input["type"] == "object"
     assert tool.schemas.result is not None
@@ -818,7 +820,7 @@ async def test_list_tools_preserves_omitted_schema_members() -> None:
     session = Session(runtime=runtime())
     await session.open()
 
-    legacy, input_only, content_only = await session.list_tools(include_schemas=True)
+    legacy, input_only, content_only = await session.list_tools()
 
     assert legacy.source is None
     assert legacy.schemas is None
@@ -829,6 +831,32 @@ async def test_list_tools_preserves_omitted_schema_members() -> None:
     assert content_only.schemas.result is not None
     assert content_only.schemas.result.parsed_content is None
     assert content_only.schemas.progress is None
+
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_rejects_missing_requested_schemas() -> None:
+    FakeClient.list_tools_result = SimpleNamespace(
+        tools=[
+            SimpleNamespace(
+                id="legacy",
+                llm_id="Legacy",
+                display_name="Legacy",
+                description="Legacy tool",
+                category="other",
+                default_allowed=True,
+                currently_allowed=True,
+                source=None,
+                schemas=None,
+            )
+        ]
+    )
+    session = Session(runtime=runtime())
+    await session.open()
+
+    with pytest.raises(DroidProtocolError, match="Legacy"):
+        await session.list_tools(include_schemas=True)
 
     await session.close()
 

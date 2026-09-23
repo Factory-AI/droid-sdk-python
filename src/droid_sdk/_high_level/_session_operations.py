@@ -10,7 +10,7 @@ on lives in :mod:`droid_sdk._high_level.session`.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from droid_sdk._high_level._convert import (
     header_mapping,
@@ -44,10 +44,12 @@ from droid_sdk._high_level.extensions import (
     SkillResource,
     SkillsResult,
     ToolInfo,
+    ToolInfoWithSchemas,
     ToolResultSchemas,
     ToolSchemas,
 )
 from droid_sdk._high_level.messages import ContextUsage
+from droid_sdk.errors import DroidProtocolError
 from droid_sdk.schemas.enums import (
     AutonomyLevel as WireAutonomy,
 )
@@ -218,6 +220,57 @@ class SessionOperationsMixin:
         self._ensure_active()
         await self._require_client().rename_session(title=title)
 
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model: str | None = None,
+        mode: Mode | None = None,
+        autonomy: Autonomy | None = None,
+        spec_model: str | None = None,
+        additional_tools: Iterable[str] | None = None,
+        enabled_tools: Iterable[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
+        restrict_tools: Iterable[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: Literal[True],
+        tool_ids: Iterable[str] | None = None,
+    ) -> list[ToolInfoWithSchemas]: ...
+
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model: str | None = None,
+        mode: Mode | None = None,
+        autonomy: Autonomy | None = None,
+        spec_model: str | None = None,
+        additional_tools: Iterable[str] | None = None,
+        enabled_tools: Iterable[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
+        restrict_tools: Iterable[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: Literal[False] | None = None,
+        tool_ids: Iterable[str] | None = None,
+    ) -> list[ToolInfo]: ...
+
+    @overload
+    async def list_tools(
+        self,
+        *,
+        model: str | None = None,
+        mode: Mode | None = None,
+        autonomy: Autonomy | None = None,
+        spec_model: str | None = None,
+        additional_tools: Iterable[str] | None = None,
+        enabled_tools: Iterable[str] | None = None,
+        disabled_tools: Iterable[str] | None = None,
+        restrict_tools: Iterable[str] | None = None,
+        skip_permissions_unsafe: bool | None = None,
+        include_schemas: bool | None,
+        tool_ids: Iterable[str] | None = None,
+    ) -> list[ToolInfo] | list[ToolInfoWithSchemas]: ...
+
     async def list_tools(
         self,
         *,
@@ -232,13 +285,14 @@ class SessionOperationsMixin:
         skip_permissions_unsafe: bool | None = None,
         include_schemas: bool | None = None,
         tool_ids: Iterable[str] | None = None,
-    ) -> list[ToolInfo]:
+    ) -> list[ToolInfo] | list[ToolInfoWithSchemas]:
         """List available tools under optional hypothetical settings.
 
-        Set ``include_schemas=True`` to include runtime input, result, and
+        Set ``include_schemas=True`` to require runtime input, result, and
         progress schemas. Use ``tool_ids`` to return only selected tools.
-        Schema fields are optional because older Droid versions and tools
-        without declared result or progress payloads omit them.
+        Older Droid versions that omit requested schemas raise
+        :class:`DroidProtocolError`. Result and progress remain optional
+        because tools only include payloads they declare.
         """
         self._ensure_active()
         additional_tools = freeze_tool_ids("additional_tools", additional_tools)
@@ -261,6 +315,30 @@ class SessionOperationsMixin:
             include_schemas=include_schemas,
             tool_ids=list_or_none(tool_ids),
         )
+        if include_schemas is True:
+            tools_with_schemas: list[ToolInfoWithSchemas] = []
+            for item in result.tools:
+                schemas = _tool_schemas_from_wire(item.schemas)
+                if schemas is None:
+                    raise DroidProtocolError(
+                        "The installed Droid version did not return requested schemas "
+                        f"for tool ID: {item.llm_id or item.id}. "
+                        "Update Droid and try again."
+                    )
+                tools_with_schemas.append(
+                    ToolInfoWithSchemas(
+                        id=item.llm_id or item.id,
+                        display_name=item.display_name or item.llm_id or item.id,
+                        description=item.description or "",
+                        category=tool_category(item.category),
+                        default_allowed=item.default_allowed,
+                        allowed=item.currently_allowed,
+                        source=item.source,
+                        schemas=schemas,
+                    )
+                )
+            return tools_with_schemas
+
         return [
             ToolInfo(
                 id=item.llm_id or item.id,

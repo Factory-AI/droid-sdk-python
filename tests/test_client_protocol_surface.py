@@ -14,10 +14,12 @@ import pytest
 from pydantic import ValidationError
 
 from droid_sdk.client import DroidClient
-from droid_sdk.errors import SessionError
+from droid_sdk.errors import DroidProtocolError, SessionError
 from droid_sdk.protocol import COMPACTION_TIMEOUT
 from droid_sdk.schemas.client import (
     ApiSessionSource,
+    ExecToolInfoWithSchemas,
+    ListToolsResultWithSchemas,
     OutputFormat,
     RewindFileCreation,
     RewindFileSnapshot,
@@ -228,8 +230,9 @@ class TestListTools:
         )
 
         read, glob = result.tools
+        assert isinstance(result, ListToolsResultWithSchemas)
+        assert isinstance(read, ExecToolInfoWithSchemas)
         assert read.source == "native"
-        assert read.schemas is not None
         assert read.schemas.input["type"] == "object"
         assert read.schemas.result is not None
         assert read.schemas.result.content == {"type": "string"}
@@ -238,9 +241,37 @@ class TestListTools:
         assert read.schemas.progress is not None
         assert read.schemas.progress["type"] == "object"
         assert glob.source == "connector"
-        assert glob.schemas is not None
         assert glob.schemas.result is None
         assert glob.schemas.progress is None
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_rejects_missing_requested_schemas(self) -> None:
+        transport = InMemoryTransport()
+        client = await _setup_client(transport)
+
+        task = _fire(client.list_tools(include_schemas=True))
+        await asyncio.sleep(0.01)
+        sent = transport.get_last_sent_parsed()
+        transport.inject_message(
+            make_success_response(
+                sent["id"],
+                {
+                    "tools": [
+                        {
+                            "id": "read-cli",
+                            "llmId": "Read",
+                            "defaultAllowed": True,
+                            "currentlyAllowed": True,
+                        }
+                    ]
+                },
+            )
+        )
+
+        with pytest.raises(DroidProtocolError, match="Read"):
+            await task
 
         await client.close()
 
