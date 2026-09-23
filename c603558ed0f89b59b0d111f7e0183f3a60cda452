@@ -1,0 +1,31 @@
+src/droid_sdk/_high_level/extensions.py
+  3f9a1da2e764bce1 13,16,38,41-42,44,67-72,77,80-81,83-84,86,111-118,122,134-135,137
+tests/test_v5_public_models.py
+  3f9a1da2e764bce1 5,382,433-445
+src/droid_sdk/_high_level/_immutable.py
+  3f9a1da2e764bce1 105-109
+src/droid_sdk/_high_level/_session_operations.py
+  3f9a1da2e764bce1 74,84-101,236-242,273
+tests/test_v5_session.py
+  3f9a1da2e764bce1 86,171-172,283,773-831
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "c603558ed0f89b59b0d111f7e0183f3a60cda452",
+  "prompts": {
+    "3f9a1da2e764bce1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "740d0cd9-5257-4df2-84c0-19ad18aa41fc",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 151,
+      "total_deletions": 29,
+      "accepted_lines": 147,
+      "overriden_lines": 0
+    }
+  }
+}
