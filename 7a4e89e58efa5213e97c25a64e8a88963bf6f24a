@@ -1,0 +1,29 @@
+tests/typing/positive.py
+  3f9a1da2e764bce1 6,52,61,70,163-170
+src/droid_sdk/_high_level/extensions.py
+  3f9a1da2e764bce1 141-153
+src/droid_sdk/schemas/client.py
+  3f9a1da2e764bce1 124,186,2119-2120,2148-2150,2156-2162,2172-2178
+src/droid_sdk/schemas/__init__.py
+  3f9a1da2e764bce1 122,186,489,571
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "7a4e89e58efa5213e97c25a64e8a88963bf6f24a",
+  "prompts": {
+    "3f9a1da2e764bce1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "740d0cd9-5257-4df2-84c0-19ad18aa41fc",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 56,
+      "total_deletions": 6,
+      "accepted_lines": 54,
+      "overriden_lines": 0
+    }
+  }
+}
