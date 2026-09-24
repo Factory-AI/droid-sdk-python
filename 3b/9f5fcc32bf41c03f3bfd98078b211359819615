@@ -1,0 +1,23 @@
+pyproject.toml
+  3f9a1da2e764bce1 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "3b9f5fcc32bf41c03f3bfd98078b211359819615",
+  "prompts": {
+    "3f9a1da2e764bce1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "740d0cd9-5257-4df2-84c0-19ad18aa41fc",
+        "model": "gpt-5.6-sol-fast"
+      },
+      "human_author": "User",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
