@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from droid_sdk import Runtime, Session
 from droid_sdk.observability import (
@@ -66,7 +69,7 @@ class LoopbackTransport:
             {"jsonrpc": "2.0", "id": request["id"], "result": result}
         )
 
-    async def read_messages(self) -> Any:
+    async def read_messages(self) -> AsyncIterator[dict[str, Any]]:
         while (message := await self._messages.get()) is not None:
             yield message
 

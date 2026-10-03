@@ -31,6 +31,7 @@ dev = [
     "starlette>=0.40",
     "uvicorn>=0.31,<1",
 ]
+package = ["twine"]
 
 [build-system]
 requires = ["hatchling"]
@@ -40,7 +41,7 @@ build-backend = "hatchling.build"
 packages = ["src/droid_sdk"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/tests"]
+exclude = ["/.github", "/scripts", "/tests"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
@@ -49,7 +50,7 @@ testpaths = ["tests"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests/typing/positive.py"]
+files = ["src", "examples", "scripts", "tests/typing/positive.py"]
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -59,12 +60,12 @@ warn_untyped_fields = true
 
 [tool.pyright]
 typeCheckingMode = "strict"
-include = ["src", "tests/typing/positive.py"]
+include = ["src", "examples", "scripts", "tests/typing/positive.py"]
 pythonVersion = "3.10"
 
 [tool.ruff]
 target-version = "py310"
-src = ["src", "tests"]
+src = ["src", "tests", "examples", "scripts"]
 
 [tool.ruff.lint]
 select = [

@@ -36,7 +36,9 @@ async def main() -> None:
     assert isinstance(result, RunSuccess), (
         result.error.message if result.error else result.subtype
     )
-    assert result.output == Review(
+    output = result.output
+    assert output is not None
+    assert output == Review(
         summary="Structured output works.",
         findings=[
             Finding(
@@ -45,7 +47,7 @@ async def main() -> None:
             )
         ],
     )
-    print(result.output.summary)
+    print(output.summary)
 
 
 if __name__ == "__main__":

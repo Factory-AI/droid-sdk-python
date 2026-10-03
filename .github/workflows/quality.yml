@@ -1,0 +1,116 @@
+name: Python SDK Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests (Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --all-extras --dev --frozen --python 3.14
+
+      - name: Run unit tests
+        run: uv run --frozen pytest
+
+  quality:
+    name: Static checks and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --all-extras --dev --frozen --python 3.10
+
+      - name: Check formatting
+        run: uv run --frozen ruff format --check .
+
+      - name: Run Ruff
+        run: uv run --frozen ruff check .
+
+      - name: Run mypy
+        run: uv run --frozen mypy
+
+      - name: Run Pyright
+        run: uv run --frozen pyright
+
+      - name: Run unit tests
+        run: uv run --frozen pytest
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Check distribution metadata
+        run: uv run --frozen --group package twine check dist/*
+
+      - name: Validate and install wheel
+        run: uv run --frozen python scripts/validate_distribution.py
+
+      - name: Upload distributions
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  python-sdk-quality:
+    name: python-sdk-quality
+    needs: [tests, quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check quality status
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$TEST_RESULT" != "success" ]] ||
+            [[ "$QUALITY_RESULT" != "success" ]]; then
+            echo "SDK quality failed: tests=$TEST_RESULT quality=$QUALITY_RESULT"
+            exit 1
+          fi
+          echo "All Python SDK quality checks passed."

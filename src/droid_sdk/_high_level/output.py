@@ -49,9 +49,7 @@ class OutputAdapter(Generic[T_co]):
         if self._model is not None:
             structured_output = _raw_object(raw)
             validation_input = (
-                thaw_json(structured_output)
-                if structured_output is not None
-                else raw
+                thaw_json(structured_output) if structured_output is not None else raw
             )
             try:
                 value = self._model.model_validate(validation_input)
