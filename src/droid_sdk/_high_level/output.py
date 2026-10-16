@@ -49,9 +49,7 @@ class OutputAdapter(Generic[T_co]):
         if self._model is not None:
             structured_output = _raw_object(raw)
             validation_input = (
-                thaw_json(structured_output)
-                if structured_output is not None
-                else raw
+                thaw_json(structured_output) if structured_output is not None else raw
             )
             try:
                 value = self._model.model_validate(validation_input)
@@ -102,8 +100,30 @@ def prepare_output_adapter(
     raise TypeError("output must be None, JsonSchema, or a Pydantic BaseModel class")
 
 
+def _schema_member(value: object, key: str) -> object:
+    if not isinstance(value, Mapping):
+        return None
+    return cast("Mapping[str, object]", value).get(key)
+
+
 def _ensure_object_schema(schema: Mapping[str, object]) -> None:
-    if schema.get("type") != "object":
+    current: object = schema
+    visited: set[str] = set()
+    while _schema_member(current, "type") is None:
+        reference = _schema_member(current, "$ref")
+        if (
+            not isinstance(reference, str)
+            or not reference.startswith("#/")
+            or reference in visited
+        ):
+            break
+        visited.add(reference)
+        current = schema
+        for part in reference[2:].split("/"):
+            current = _schema_member(
+                current, part.replace("~1", "/").replace("~0", "~")
+            )
+    if _schema_member(current, "type") != "object":
         raise TypeError("structured output schema must describe a top-level object")
 
 
