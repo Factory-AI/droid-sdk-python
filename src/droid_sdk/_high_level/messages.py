@@ -210,12 +210,22 @@ class HookExecution:
 
 @dataclass(frozen=True, slots=True)
 class ErrorEvent:
+    """Preserve provider error identity without requiring message-text parsing."""
+
     message: str
     error_type: ErrorType
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    error_name: str | None = field(default=None, kw_only=True)
+    error_detail: Mapping[str, object] | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         ensure_aware(self.timestamp, "timestamp")
+        if self.error_detail is not None:
+            object.__setattr__(
+                self,
+                "error_detail",
+                freeze_json_object(self.error_detail, where="error detail"),
+            )
 
 
 Message: TypeAlias = (
