@@ -523,6 +523,14 @@ class StreamStateTracker(Generic[T]):
                     message=notification.message,
                     error_type=ErrorType(notification.error_type.value),
                     timestamp=_parse_timestamp(notification.timestamp),
+                    error_name=(
+                        notification.error.name if notification.error else None
+                    ),
+                    error_detail=(
+                        notification.error.model_dump(by_alias=True)
+                        if notification.error
+                        else None
+                    ),
                 )
             ]
         if isinstance(notification, PermissionResolvedNotification):

@@ -63,6 +63,11 @@ Terminal outcomes are immutable `RunSuccess`, `RunInterrupted`, or
 do not raise. Setup, connection, process, protocol, timeout, and cancellation
 failures do. `asyncio.CancelledError` is never wrapped.
 
+`ErrorEvent.error_name` exposes the nested provider error name when available,
+so applications can classify failures without matching message text.
+`error_type` retains the protocol's top-level category; `error_detail` contains
+the immutable nested payload. Both fields are `None` when detail is absent.
+
 The wheel contains `py.typed`. Result and event unions narrow with
 `isinstance()`. `stream.result` is cached after completion and raises
 `StreamIncompleteError` before then.
