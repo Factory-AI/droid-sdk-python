@@ -18,7 +18,7 @@ import asyncio
 import contextlib
 import dataclasses
 import logging
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from types import TracebackType  # noqa: TC003
 from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
@@ -350,6 +350,7 @@ class DroidClient:
         auto_reject_permission_requests: bool | None = None,
         disable_builtin_skills: bool | None = None,
         mcp_oauth_callback_uri: str | None = None,
+        extra_params: Mapping[str, Any] | None = None,
     ) -> InitializeSessionResult:
         """Initialize a new session.
 
@@ -390,6 +391,11 @@ class DroidClient:
                 requests instead of forwarding them.
             disable_builtin_skills: Whether builtin skills are unavailable.
             mcp_oauth_callback_uri: OAuth callback URI for MCP.
+            extra_params: Additional JSON-RPC fields to send, keyed by wire name
+                (camelCase). This is the supported path for protocol fields newer
+                than the installed SDK. Keys are sent as-is; a key that collides
+                with a modelled field (including SDK-set fields such as
+                ``sessionOriginHint``) raises ``ValueError``.
 
         Returns:
             Typed ``InitializeSessionResult`` with session_id, session,
@@ -398,6 +404,7 @@ class DroidClient:
         Raises:
             ConnectionError: If the client has been closed.
             ProtocolError: If the server returns an error.
+            ValueError: If ``extra_params`` collides with a modelled field.
         """
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
@@ -445,6 +452,9 @@ class DroidClient:
                 mcp_oauth_callback_uri=mcp_oauth_callback_uri,
             )
         )
+        params = _merge_extra_params(
+            params, extra_params, InitializeSessionRequestParams
+        )
         response = await protocol.send_request(
             method=DroidServerMethod.INITIALIZE_SESSION.value,
             params=params,
@@ -468,6 +478,7 @@ class DroidClient:
         disable_builtin_skills: bool | None = None,
         session_location: str | None = None,
         session_source: SessionSource | dict[str, Any] | None = None,
+        extra_params: Mapping[str, Any] | None = None,
     ) -> LoadSessionResult:
         """Load an existing session.
 
@@ -487,6 +498,11 @@ class DroidClient:
             disable_builtin_skills: Whether builtin skills are unavailable.
             session_location: Optional session origin/location metadata.
             session_source: Optional structured session source metadata.
+            extra_params: Additional JSON-RPC fields to send, keyed by wire name
+                (camelCase). This is the supported path for protocol fields newer
+                than the installed SDK. Keys are sent as-is; a key that collides
+                with a modelled field (including SDK-set fields such as
+                ``sessionOriginHint``) raises ``ValueError``.
 
         Returns:
             Typed ``LoadSessionResult`` with session and settings.
@@ -495,6 +511,7 @@ class DroidClient:
             SessionNotFoundError: If the session does not exist.
             ProtocolError: If the server returns an error.
             ConnectionError: If the client has been closed.
+            ValueError: If ``extra_params`` collides with a modelled field.
         """
         self._ensure_not_closed()
         protocol = self._ensure_protocol()
@@ -519,6 +536,7 @@ class DroidClient:
                 session_origin_hint=SessionOrigin.Sdk,
             )
         )
+        params = _merge_extra_params(params, extra_params, LoadSessionRequestParams)
         response = await protocol.send_request(
             method=DroidServerMethod.LOAD_SESSION.value,
             params=params,
@@ -2032,6 +2050,29 @@ def _serialize_params(model: BaseModel) -> dict[str, Any]:
         by_alias=True,
         exclude_none=True,
     )
+
+
+def _merge_extra_params(
+    params: dict[str, Any],
+    extra_params: Mapping[str, Any] | None,
+    model_cls: type[BaseModel],
+) -> dict[str, Any]:
+    """Merge caller-supplied wire fields into serialized request params.
+
+    Keys are compared against every wire alias (camelCase) of
+    ``model_cls``, whether or not that field was set, so modelled fields
+    always go through the typed argument and its validation.
+    """
+    if not extra_params:
+        return params
+    modelled = {f.alias or name for name, f in model_cls.model_fields.items()}
+    for key in extra_params:
+        if key in modelled:
+            raise ValueError(
+                f"extra_params key {key!r} collides with a modelled field; "
+                "use the corresponding keyword argument instead"
+            )
+    return {**params, **extra_params}
 
 
 def _validate_session_tags(
