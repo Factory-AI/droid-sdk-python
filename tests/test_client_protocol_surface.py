@@ -883,3 +883,153 @@ class TestNewRequestFields:
         ]
 
         await client.close()
+
+
+# ---------------------------------------------------------------------------
+# extra_params escape hatch
+# ---------------------------------------------------------------------------
+
+_INIT_RESULT: dict[str, Any] = {
+    "sessionId": "sess-1",
+    "session": {"id": "sess-1", "messages": []},
+    "settings": {"modelId": "claude-sonnet-4", "reasoningEffort": "medium"},
+}
+_LOAD_RESULT: dict[str, Any] = {
+    "session": {"id": "sess-1", "messages": []},
+    "settings": {"modelId": "claude-sonnet-4", "reasoningEffort": "medium"},
+}
+
+
+async def _connected() -> tuple[InMemoryTransport, DroidClient]:
+    transport = InMemoryTransport()
+    client = DroidClient(transport=transport)
+    await client.connect()
+    return transport, client
+
+
+class TestExtraParams:
+    @pytest.mark.asyncio
+    async def test_initialize_session_forwards_extra_params(self) -> None:
+        transport, client = await _connected()
+
+        sent, _ = await _call(
+            transport,
+            client.initialize_session(
+                machine_id="test",
+                cwd="/tmp",
+                extra_params={"experimentalFlag": True, "nested": {"a": 1}},
+            ),
+            _INIT_RESULT,
+        )
+
+        assert sent["params"]["machineId"] == "test"
+        assert sent["params"]["cwd"] == "/tmp"
+        assert sent["params"]["experimentalFlag"] is True
+        assert sent["params"]["nested"] == {"a": 1}
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_load_session_forwards_extra_params(self) -> None:
+        transport, client = await _connected()
+
+        sent, _ = await _call(
+            transport,
+            client.load_session(
+                session_id="sess-1", extra_params={"experimentalFlag": True}
+            ),
+            _LOAD_RESULT,
+        )
+
+        assert sent["method"] == "droid.load_session"
+        assert sent["params"]["experimentalFlag"] is True
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_initialize_session_rejects_collision_with_modelled_field(
+        self,
+    ) -> None:
+        transport, client = await _connected()
+        before = len(transport.sent_messages)
+
+        with pytest.raises(ValueError, match="enabledToolIds"):
+            await client.initialize_session(
+                machine_id="test",
+                cwd="/tmp",
+                enabled_tool_ids=["read"],
+                extra_params={"enabledToolIds": []},
+            )
+
+        assert len(transport.sent_messages) == before
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_load_session_rejects_collision_with_modelled_field(self) -> None:
+        transport, client = await _connected()
+        before = len(transport.sent_messages)
+
+        with pytest.raises(ValueError, match="sessionId"):
+            await client.load_session(
+                session_id="sess-1", extra_params={"sessionId": "other"}
+            )
+
+        assert len(transport.sent_messages) == before
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_rejects_modelled_field_even_when_unset(self) -> None:
+        transport, client = await _connected()
+
+        with pytest.raises(ValueError, match="modelId"):
+            await client.initialize_session(
+                machine_id="test", cwd="/tmp", extra_params={"modelId": "x"}
+            )
+
+        assert transport.sent_messages == []
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_extra_params_none_is_a_no_op(self) -> None:
+        transport, client = await _connected()
+
+        baseline, _ = await _call(
+            transport,
+            client.initialize_session(machine_id="test", cwd="/tmp"),
+            _INIT_RESULT,
+        )
+        with_none, _ = await _call(
+            transport,
+            client.initialize_session(machine_id="test", cwd="/tmp", extra_params=None),
+            _INIT_RESULT,
+        )
+        with_empty, _ = await _call(
+            transport,
+            client.initialize_session(machine_id="test", cwd="/tmp", extra_params={}),
+            _INIT_RESULT,
+        )
+
+        assert with_none["params"] == baseline["params"]
+        assert with_empty["params"] == baseline["params"]
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_extra_params_does_not_rename_keys(self) -> None:
+        transport, client = await _connected()
+
+        sent, _ = await _call(
+            transport,
+            client.initialize_session(
+                machine_id="test", cwd="/tmp", extra_params={"snake_case_key": 1}
+            ),
+            _INIT_RESULT,
+        )
+
+        assert sent["params"]["snake_case_key"] == 1
+        assert "snakeCaseKey" not in sent["params"]
+
+        await client.close()
