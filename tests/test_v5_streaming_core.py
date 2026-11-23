@@ -12,6 +12,7 @@ from droid_sdk import (
     AssistantMessage,
     Autonomy,
     ErrorEvent,
+    ErrorType,
     HookExecution,
     InteractionHandlers,
     JsonSchema,
@@ -1437,3 +1438,44 @@ async def test_dispatcher_registers_through_low_level_handler_slots() -> None:
         "cancelled": True,
         "answers": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_error_event_exposes_nested_error_name_and_detail() -> None:
+    stream = RunStream[None](expected_turn_id="turn", session_id="session")
+    stream.feed_notification(
+        {
+            "type": "error",
+            "message": "Requested model was not found on the API provider",
+            "errorType": "Error",
+            "timestamp": "2026-08-02T11:00:13.647Z",
+            "error": {
+                "name": "LLMInvalidRequestError",
+                "message": "Requested model was not found on the API provider",
+            },
+        }
+    )
+    stream.feed_notification(
+        {
+            "type": "error",
+            "message": "no detail",
+            "errorType": "Error",
+            "timestamp": "2026-08-02T11:00:14.000Z",
+        }
+    )
+    stream.feed_notification(_complete())
+
+    events = await _collect(stream)
+    with_detail, without_detail = (
+        cast("ErrorEvent", event) for event in events if isinstance(event, ErrorEvent)
+    )
+    assert with_detail.error_type == ErrorType.ERROR
+    assert with_detail.error_name == "LLMInvalidRequestError"
+    assert with_detail.error_detail == {
+        "name": "LLMInvalidRequestError",
+        "message": "Requested model was not found on the API provider",
+    }
+    with pytest.raises(TypeError):
+        cast("Any", with_detail.error_detail)["name"] = "changed"
+    assert without_detail.error_name is None
+    assert without_detail.error_detail is None
