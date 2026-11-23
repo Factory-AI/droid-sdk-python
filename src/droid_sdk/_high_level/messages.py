@@ -213,9 +213,17 @@ class ErrorEvent:
     message: str
     error_type: ErrorType
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    error_name: str | None = None
+    error_detail: FrozenJsonObject | None = None
 
     def __post_init__(self) -> None:
         ensure_aware(self.timestamp, "timestamp")
+        if self.error_detail is not None:
+            object.__setattr__(
+                self,
+                "error_detail",
+                freeze_json_object(self.error_detail, where="error detail"),
+            )
 
 
 Message: TypeAlias = (
